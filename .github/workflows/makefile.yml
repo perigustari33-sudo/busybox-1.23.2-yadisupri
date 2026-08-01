@@ -1,4 +1,4 @@
-name: Build BusyBox Static ARM
+name: Build BusyBox Static for MDM9607 (ARM Cortex-A7)
 
 on:
   push:
@@ -10,13 +10,11 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-        
+
     - name: Install dependencies
       run: |
         sudo apt-get update
@@ -25,139 +23,52 @@ jobs:
           binutils-arm-linux-gnueabihf \
           libc6-dev-armhf-cross \
           make \
-          wget \
-          bc \
-          git \
-          cpio \
-          rsync \
           qemu-user-static
-        
-        # Verify cross compiler
-        arm-linux-gnueabihf-gcc --version
 
-    - name: Configure for static build
+    - name: Configure for static build (ARMv7-A)
       run: |
-        # Create default config
-        make ARCH=arm \
-             CROSS_COMPILE=arm-linux-gnueabihf- \
-             defconfig
-        
-        # Enable static build
+        # Setup cross-compilation environment
+        export CROSS_COMPILE=arm-linux-gnueabihf-
+        export ARCH=arm
+
+        # Start with default configuration
+        make defconfig
+
+        # 1. Enable static linking
         echo "CONFIG_STATIC=y" >> .config
-        
-        # Disable shared libraries
-        echo "CONFIG_FEATURE_PREFER_APPLETS=y" >> .config
+
+        # 2. Disable shared library support
         echo "# CONFIG_FEATURE_SHARED_BUSYBOX is not set" >> .config
-        
-        # Remove any existing march flags from config
-        sed -i '/CONFIG_EXTRA_CFLAGS/d' .config
-        
-        # Apply config
-        make ARCH=arm \
-             CROSS_COMPILE=arm-linux-gnueabihf- \
-             oldconfig
+
+        # 3. Disable hardware-accelerated SHA (PENTING untuk ARM)
+        #    Ini adalah penyebab umum error "undefined reference"
+        sed -i 's/^CONFIG_SHA1_HWACCEL=y/# CONFIG_SHA1_HWACCEL is not set/' .config
+        sed -i 's/^CONFIG_SHA256_HWACCEL=y/# CONFIG_SHA256_HWACCEL is not set/' .config
+
+        # 4. Apply the new configuration
+        make oldconfig
 
     - name: Build BusyBox
       run: |
-        # Build dengan CFLAGS yang benar
+        export CROSS_COMPILE=arm-linux-gnueabihf-
+        export ARCH=arm
+
+        # Build with optimal flags for Cortex-A7
+        # -march=armv7-a: Target architecture
+        # -mfpu=vfpv4-d16: Use VFPv4 with 16 double-precision registers
+        # -mfloat-abi=hard: Use hardware FPU
         make -j$(nproc) \
-             ARCH=arm \
-             CROSS_COMPILE=arm-linux-gnueabihf- \
-             CFLAGS="-Os -pipe -static" \
+             CFLAGS="-Os -pipe -static -march=armv7-a -mfpu=vfpv4-d16 -mfloat-abi=hard" \
              LDFLAGS="-static" \
-             SKIP_STRIP=n \
-             EXTRA_CFLAGS="-march=armv7-a"
-        
-        # Check hasil build
-        file busybox
-        ls -lh busybox
+             SKIP_STRIP=n
 
-    - name: Test binary with QEMU
+    - name: Test with QEMU
       run: |
-        # Test help
-        qemu-arm-static ./busybox --help || true
-        
-        # Test version
+        # Test the binary in an ARM emulator
         qemu-arm-static ./busybox --version
-        
-        # Test basic commands
-        qemu-arm-static ./busybox echo "Hello from BusyBox!"
-        qemu-arm-static ./busybox ls -la
-
-    - name: Show binary info
-      run: |
-        echo "=== Binary Information ==="
-        file busybox
-        echo ""
-        echo "=== Size ==="
-        ls -lh busybox
-        echo ""
-        echo "=== Static Check ==="
-        arm-linux-gnueabihf-readelf -d busybox | grep NEEDED || echo "No dynamic dependencies (static binary)"
-        echo ""
-        echo "=== Architecture ==="
-        arm-linux-gnueabihf-readelf -h busybox | grep Machine
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: busybox-static-armv7l
-        path: |
-          busybox
-          busybox_unstripped
-          .config
-        retention-days: 30
-
-    - name: Create compressed binary
-      run: |
-        # Compress binary for smaller artifact
-        gzip -9 -c busybox > busybox-armv7l.gz
-        
-        # Create checksum
-        sha256sum busybox > busybox-armv7l.sha256
-        
-        # Create info file
-        cat > busybox-info.txt << EOF
-        BusyBox ARM Static Build
-        =========================
-        Build Date: $(date)
-        Version: $(./busybox --version | head -1)
-        Architecture: ARM 32-bit (armv7-a)
-        Static: Yes
-        Size: $(ls -lh busybox | awk '{print $5}')
-        SHA256: $(sha256sum busybox | awk '{print $1}')
-        EOF
-
-    - name: Upload compressed artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: busybox-armv7l-compressed
-        path: |
-          busybox-armv7l.gz
-          busybox-armv7l.sha256
-          busybox-info.txt
-        retention-days: 30
-
-    - name: Create release package
-      if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
-      run: |
-        mkdir -p release/
-        cp busybox release/busybox-armv7l
-        cp .config release/config-armv7l.txt
-        cp busybox-info.txt release/
-        
-        # Create tarball
-        tar -czf busybox-armv7l-static.tar.gz -C release/ .
-        
-        # Create checksum
-        sha256sum busybox-armv7l-static.tar.gz > busybox-armv7l-static.tar.gz.sha256
-
-    - name: Upload release assets
-      if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
-      uses: actions/upload-artifact@v4
-      with:
-        name: release-armv7l
-        path: |
-          busybox-armv7l-static.tar.gz
-          busybox-armv7l-static.tar.gz.sha256
-        retention-days: 90
+        name: busybox-mdm9607-static
+        path: busybox
