@@ -1,9 +1,7 @@
-name: Build BusyBox Static for MDM9607 (ARM Cortex-A7)
+name: Build BusyBox Static for MDM9607 (GCC 4.9)
 
 on:
   push:
-    branches: [ main, master ]
-  pull_request:
     branches: [ main, master ]
   workflow_dispatch:
 
@@ -15,60 +13,46 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Install dependencies
+    - name: Download Linaro GCC 4.9 Toolchain
       run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          gcc-arm-linux-gnueabihf \
-          binutils-arm-linux-gnueabihf \
-          libc6-dev-armhf-cross \
-          make \
-          qemu-user-static
+        # Download toolchain GCC 4.9.4 dari Linaro
+        wget -c https://releases.linaro.org/components/toolchain/binaries/4.9-2017.01/arm-linux-gnueabihf/gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf.tar.xz
+        tar xf gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf.tar.xz
+        # Tambahkan ke PATH
+        echo "$(pwd)/gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf/bin" >> $GITHUB_PATH
+        
+        # Verifikasi versi
+        arm-linux-gnueabihf-gcc --version
 
-    - name: Configure for static build (ARMv7-A)
+    - name: Configure for static build (ARMv7-A for MDM9607)
       run: |
-        # Setup cross-compilation environment
         export CROSS_COMPILE=arm-linux-gnueabihf-
         export ARCH=arm
-
-        # Start with default configuration
+        
         make defconfig
-
-        # 1. Enable static linking
+        
+        # Konfigurasi static build
         echo "CONFIG_STATIC=y" >> .config
-
-        # 2. Disable shared library support
         echo "# CONFIG_FEATURE_SHARED_BUSYBOX is not set" >> .config
-
-        # 3. Disable hardware-accelerated SHA (PENTING untuk ARM)
-        #    Ini adalah penyebab umum error "undefined reference"
+        
+        # Nonaktifkan SHA HWACCEL (penting untuk ARM)
         sed -i 's/^CONFIG_SHA1_HWACCEL=y/# CONFIG_SHA1_HWACCEL is not set/' .config
         sed -i 's/^CONFIG_SHA256_HWACCEL=y/# CONFIG_SHA256_HWACCEL is not set/' .config
-
-        # 4. Apply the new configuration
+        
         make oldconfig
 
     - name: Build BusyBox
       run: |
         export CROSS_COMPILE=arm-linux-gnueabihf-
         export ARCH=arm
-
-        # Build with optimal flags for Cortex-A7
-        # -march=armv7-a: Target architecture
-        # -mfpu=vfpv4-d16: Use VFPv4 with 16 double-precision registers
-        # -mfloat-abi=hard: Use hardware FPU
+        
         make -j$(nproc) \
              CFLAGS="-Os -pipe -static -march=armv7-a -mfpu=vfpv4-d16 -mfloat-abi=hard" \
              LDFLAGS="-static" \
              SKIP_STRIP=n
 
-    - name: Test with QEMU
-      run: |
-        # Test the binary in an ARM emulator
-        qemu-arm-static ./busybox --version
-
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: busybox-mdm9607-static
+        name: busybox-mdm9607-gcc49
         path: busybox
