@@ -26,102 +26,36 @@ jobs:
         # Verifikasi compiler
         armv7a-linux-androideabi21-clang --version
 
-    - name: Create minimal config for MDM9607
+    - name: Configure with all answers
       run: |
-        cat > .config << 'EOF'
-        CONFIG_HAVE_DOT_CONFIG=y
-        CONFIG_DESKTOP=y
-        CONFIG_EXTRA_COMPAT=y
-        CONFIG_INCLUDE_SUSv2=y
-        CONFIG_USE_PORTABLE_CODE=y
-        CONFIG_PLATFORM_LINUX=y
-        CONFIG_FEATURE_BUFFERS_USE_MALLOC=y
-        CONFIG_SHOW_USAGE=y
-        CONFIG_FEATURE_VERBOSE_USAGE=y
-        CONFIG_FEATURE_COMPRESS_USAGE=y
-        CONFIG_LONG_OPTS=y
-        CONFIG_FEATURE_DEVPTS=y
-        CONFIG_FEATURE_CLEAN_UP=y
-        CONFIG_FEATURE_PIDFILE=y
-        CONFIG_FEATURE_SUID=y
-        CONFIG_FEATURE_PREFER_APPLETS=y
-        CONFIG_BUSYBOX_EXEC_PATH="/proc/self/exe"
-        CONFIG_FEATURE_SYSLOG=y
-        CONFIG_STATIC=y
-        CONFIG_LFS=y
-        CONFIG_FEATURE_LFS=y
-        CONFIG_CROSS_COMPILER_PREFIX="armv7a-linux-androideabi21-"
-        CONFIG_EXTRA_CFLAGS="-D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64"
-        CONFIG_INSTALL_APPLET_SYMLINKS=y
-        CONFIG_PREFIX="./_install"
-        CONFIG_FEATURE_EDITING=y
-        CONFIG_FEATURE_EDITING_VI=y
-        CONFIG_FEATURE_TAB_COMPLETION=y
-        CONFIG_CAT=y
-        CONFIG_ECHO=y
-        CONFIG_FEATURE_FANCY_ECHO=y
-        CONFIG_LS=y
-        CONFIG_FEATURE_LS_FILETYPES=y
-        CONFIG_FEATURE_LS_RECURSIVE=y
-        CONFIG_MKDIR=y
-        CONFIG_PWD=y
-        CONFIG_RM=y
-        CONFIG_TRUE=y
-        CONFIG_FALSE=y
-        CONFIG_TEST=y
-        CONFIG_TOUCH=y
-        CONFIG_UNIQ=y
-        CONFIG_WHOAMI=y
-        CONFIG_BASENAME=y
-        CONFIG_DIRNAME=y
-        CONFIG_HEAD=y
-        CONFIG_TAIL=y
-        CONFIG_SLEEP=y
-        CONFIG_SYNC=y
-        CONFIG_ASH=y
-        CONFIG_ASH_BASH_COMPAT=y
-        CONFIG_ASH_JOB_CONTROL=y
-        CONFIG_ASH_ALIAS=y
-        CONFIG_ASH_GETOPTS=y
-        CONFIG_ASH_BUILTIN_ECHO=y
-        CONFIG_ASH_BUILTIN_PRINTF=y
-        CONFIG_ASH_BUILTIN_TEST=y
-        CONFIG_ASH_CMDCMD=y
-        CONFIG_ASH_OPTIMIZE_FOR_SIZE=y
-        CONFIG_DMESG=y
-        CONFIG_MORE=y
-        CONFIG_FREE=y
-        CONFIG_KILL=y
-        CONFIG_KILLALL=y
-        CONFIG_PS=y
-        CONFIG_FEATURE_PS_WIDE=y
-        CONFIG_TOP=y
-        CONFIG_UPTIME=y
-        CONFIG_PING=y
-        CONFIG_WGET=y
-        CONFIG_FEATURE_WGET_STATUSBAR=y
-        CONFIG_VI=y
-        CONFIG_FEATURE_VI_MAX_LEN=1024
-        CONFIG_FEATURE_VI_COLON=y
-        CONFIG_FEATURE_VI_YANKMARK=y
-        CONFIG_FEATURE_VI_SEARCH=y
-        CONFIG_FEATURE_VI_USE_SIGNALS=y
-        CONFIG_FEATURE_VI_DOT_CMD=y
-        CONFIG_INIT=y
-        CONFIG_FEATURE_USE_INITTAB=y
-        CONFIG_FEATURE_INIT_SCTTY=y
-        CONFIG_FEATURE_INIT_SYSLOG=y
-        CONFIG_FEATURE_INIT_COREDUMPS=y
-        CONFIG_HALT=y
-        CONFIG_GUNZIP=y
-        CONFIG_GZIP=y
-        CONFIG_TAR=y
-        CONFIG_FEATURE_TAR_CREATE=y
-        CONFIG_UNZIP=y
-        CONFIG_GETTY=y
-        CONFIG_LOGIN=y
-        CONFIG_PASSWD=y
-        EOF
+        # Gunakan yes untuk menjawab semua pertanyaan
+        yes "" | make CC=armv7a-linux-androideabi21-clang \
+                     CXX=armv7a-linux-androideabi21-clang++ \
+                     AR=llvm-ar \
+                     AS=llvm-as \
+                     LD=ld.lld \
+                     STRIP=llvm-strip \
+                     CROSS_COMPILE=armv7a-linux-androideabi21- \
+                     ARCH=arm \
+                     defconfig
+        
+        # Set konfigurasi static dan LFS
+        echo "CONFIG_STATIC=y" >> .config
+        echo "CONFIG_LFS=y" >> .config
+        echo "CONFIG_FEATURE_LFS=y" >> .config
+        echo "CONFIG_CROSS_COMPILER_PREFIX=\"armv7a-linux-androideabi21-\"" >> .config
+        echo "CONFIG_EXTRA_CFLAGS=\"-D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64\"" >> .config
+        
+        # Nonaktifkan interaktif dan update config
+        yes "" | make CC=armv7a-linux-androideabi21-clang \
+                     CXX=armv7a-linux-androideabi21-clang++ \
+                     AR=llvm-ar \
+                     AS=llvm-as \
+                     LD=ld.lld \
+                     STRIP=llvm-strip \
+                     CROSS_COMPILE=armv7a-linux-androideabi21- \
+                     ARCH=arm \
+                     oldconfig
 
     - name: Build BusyBox
       run: |
@@ -160,18 +94,6 @@ jobs:
           tail -50 build.log
           exit 1
         fi
-
-    - name: Get binary info
-      if: success()
-      run: |
-        echo "=== Binary Information ==="
-        file busybox
-        echo ""
-        echo "=== Size ==="
-        ls -lh busybox
-        echo ""
-        echo "=== Static Check ==="
-        armv7a-linux-androideabi21-readelf -d busybox | grep NEEDED || echo "No dynamic dependencies (static binary)"
 
     - name: Upload artifacts
       if: success()
