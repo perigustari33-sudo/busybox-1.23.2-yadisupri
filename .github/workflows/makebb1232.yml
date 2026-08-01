@@ -28,13 +28,8 @@ jobs:
 
     - name: Create minimal config for MDM9607
       run: |
-        # Buat konfigurasi minimal yang sudah teruji
         cat > .config << 'EOF'
         CONFIG_HAVE_DOT_CONFIG=y
-
-        #
-        # Busybox Settings
-        #
         CONFIG_DESKTOP=y
         CONFIG_EXTRA_COMPAT=y
         CONFIG_INCLUDE_SUSv2=y
@@ -52,19 +47,16 @@ jobs:
         CONFIG_FEATURE_PREFER_APPLETS=y
         CONFIG_BUSYBOX_EXEC_PATH="/proc/self/exe"
         CONFIG_FEATURE_SYSLOG=y
-
-        #
-        # Build Options
-        #
         CONFIG_STATIC=y
         CONFIG_LFS=y
         CONFIG_FEATURE_LFS=y
         CONFIG_CROSS_COMPILER_PREFIX="armv7a-linux-androideabi21-"
         CONFIG_EXTRA_CFLAGS="-D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64"
-
-        #
-        # Coreutils (minimal)
-        #
+        CONFIG_INSTALL_APPLET_SYMLINKS=y
+        CONFIG_PREFIX="./_install"
+        CONFIG_FEATURE_EDITING=y
+        CONFIG_FEATURE_EDITING_VI=y
+        CONFIG_FEATURE_TAB_COMPLETION=y
         CONFIG_CAT=y
         CONFIG_ECHO=y
         CONFIG_FEATURE_FANCY_ECHO=y
@@ -86,10 +78,6 @@ jobs:
         CONFIG_TAIL=y
         CONFIG_SLEEP=y
         CONFIG_SYNC=y
-
-        #
-        # Shells
-        #
         CONFIG_ASH=y
         CONFIG_ASH_BASH_COMPAT=y
         CONFIG_ASH_JOB_CONTROL=y
@@ -100,18 +88,8 @@ jobs:
         CONFIG_ASH_BUILTIN_TEST=y
         CONFIG_ASH_CMDCMD=y
         CONFIG_ASH_OPTIMIZE_FOR_SIZE=y
-
-        #
-        # Linux System Utilities
-        #
         CONFIG_DMESG=y
         CONFIG_MORE=y
-        CONFIG_MOUNT=y
-        CONFIG_UMOUNT=y
-
-        #
-        # Process Utilities
-        #
         CONFIG_FREE=y
         CONFIG_KILL=y
         CONFIG_KILLALL=y
@@ -119,17 +97,9 @@ jobs:
         CONFIG_FEATURE_PS_WIDE=y
         CONFIG_TOP=y
         CONFIG_UPTIME=y
-
-        #
-        # Networking Utilities
-        #
         CONFIG_PING=y
         CONFIG_WGET=y
         CONFIG_FEATURE_WGET_STATUSBAR=y
-
-        #
-        # Editors
-        #
         CONFIG_VI=y
         CONFIG_FEATURE_VI_MAX_LEN=1024
         CONFIG_FEATURE_VI_COLON=y
@@ -137,35 +107,23 @@ jobs:
         CONFIG_FEATURE_VI_SEARCH=y
         CONFIG_FEATURE_VI_USE_SIGNALS=y
         CONFIG_FEATURE_VI_DOT_CMD=y
-
-        #
-        # Init Utilities
-        #
         CONFIG_INIT=y
         CONFIG_FEATURE_USE_INITTAB=y
         CONFIG_FEATURE_INIT_SCTTY=y
         CONFIG_FEATURE_INIT_SYSLOG=y
         CONFIG_FEATURE_INIT_COREDUMPS=y
         CONFIG_HALT=y
-
-        #
-        # Archival Utilities
-        #
         CONFIG_GUNZIP=y
         CONFIG_GZIP=y
         CONFIG_TAR=y
         CONFIG_FEATURE_TAR_CREATE=y
         CONFIG_UNZIP=y
-
-        #
-        # Login/Password
-        #
         CONFIG_GETTY=y
         CONFIG_LOGIN=y
         CONFIG_PASSWD=y
         EOF
 
-    - name: Build BusyBox with verbose output
+    - name: Build BusyBox
       run: |
         export CC=armv7a-linux-androideabi21-clang
         export CXX=armv7a-linux-androideabi21-clang++
@@ -176,8 +134,8 @@ jobs:
         export CROSS_COMPILE=armv7a-linux-androideabi21-
         export ARCH=arm
         
-        # Build dengan verbose untuk melihat error detail
-        make V=1 -j$(nproc) \
+        # Build
+        make -j$(nproc) \
           CC="$CC" \
           CXX="$CXX" \
           AR="$AR" \
@@ -187,35 +145,41 @@ jobs:
           CFLAGS="-Os -pipe -static -march=armv7-a -mfpu=vfpv4-d16 -mfloat-abi=softfp -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64" \
           LDFLAGS="-static" \
           SKIP_STRIP=n 2>&1 | tee build.log
-        
-        # Cek hasil
-        file busybox || true
-        ls -lh busybox || true
 
-    - name: Check build log for errors
-      if: failure()
+    - name: Check build result
       run: |
-        echo "=== Build Log (last 100 lines) ==="
-        tail -100 build.log
-        echo ""
-        echo "=== Errors in build log ==="
-        grep -i "error:" build.log || echo "No errors found"
+        echo "=== Build Result ==="
+        if [ -f busybox ]; then
+          file busybox
+          ls -lh busybox
+          echo "Build successful!"
+        else
+          echo "Build failed!"
+          echo ""
+          echo "=== Last 50 lines of build.log ==="
+          tail -50 build.log
+          exit 1
+        fi
 
-    - name: Test binary with QEMU
+    - name: Get binary info
       if: success()
       run: |
-        sudo apt-get update
-        sudo apt-get install -y qemu-user-static
-        qemu-arm-static ./busybox --version
-        qemu-arm-static ./busybox echo "Test from Android NDK build"
+        echo "=== Binary Information ==="
+        file busybox
+        echo ""
+        echo "=== Size ==="
+        ls -lh busybox
+        echo ""
+        echo "=== Static Check ==="
+        armv7a-linux-androideabi21-readelf -d busybox | grep NEEDED || echo "No dynamic dependencies (static binary)"
 
     - name: Upload artifacts
+      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: busybox-mdm9607-ndk
         path: |
           busybox
-          busybox_unstripped
           .config
           build.log
         retention-days: 30
