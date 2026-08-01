@@ -1,0 +1,160 @@
+name: Build BusyBox Static ARM
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+    # Manual trigger
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        # Multiple ARM architectures
+        arch:
+          - armv7l
+        
+        # Bisa tambahkan konfigurasi lain jika perlu
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          gcc-arm-linux-gnueabihf \
+          gcc-aarch64-linux-gnu \
+          binutils-arm-linux-gnueabihf \
+          binutils-aarch64-linux-gnu \
+          libc6-dev-armhf-cross \
+          libc6-dev-arm64-cross \
+          make \
+          wget \
+          bc \
+          git \
+          cpio \
+          rsync \
+          ncurses-dev
+        
+    - name: Set architecture variables
+      id: arch_vars
+      run: |
+        if [ "${{ matrix.arch }}" = "armv7l" ]; then
+          echo "CROSS_COMPILE=arm-linux-gnueabihf-" >> $GITHUB_OUTPUT
+          echo "CC=arm-linux-gnueabihf-gcc" >> $GITHUB_OUTPUT
+          echo "ARCH=arm" >> $GITHUB_OUTPUT
+          echo "TARGET=armv7l" >> $GITHUB_OUTPUT
+        elif [ "${{ matrix.arch }}" = "aarch64" ]; then
+          echo "CROSS_COMPILE=aarch64-linux-gnu-" >> $GITHUB_OUTPUT
+          echo "CC=aarch64-linux-gnu-gcc" >> $GITHUB_OUTPUT
+          echo "ARCH=arm64" >> $GITHUB_OUTPUT
+          echo "TARGET=aarch64" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Configure for static build
+      run: |
+        # Buat konfigurasi default
+        make ARCH=${{ steps.arch_vars.outputs.ARCH }} \
+             CROSS_COMPILE=${{ steps.arch_vars.outputs.CROSS_COMPILE }} \
+             defconfig
+        
+        # Enable static build
+        echo "CONFIG_STATIC=y" >> .config
+        
+        # Disable shared libraries
+        echo "CONFIG_FEATURE_PREFER_APPLETS=y" >> .config
+        echo "CONFIG_FEATURE_SHARED_BUSYBOX=y" >> .config
+        
+        # Tambahan konfigurasi untuk ARM (opsional)
+        echo "CONFIG_EXTRA_CFLAGS=-Os -pipe -march=${{ steps.arch_vars.outputs.ARCH }}" >> .config
+        
+        # Update konfigurasi
+        make ARCH=${{ steps.arch_vars.outputs.ARCH }} \
+             CROSS_COMPILE=${{ steps.arch_vars.outputs.CROSS_COMPILE }} \
+             oldconfig
+        
+        # Atau pake menuconfig jika perlu (non-interactive)
+        # Hati-hati dengan CONFIG_EXTRA_CFLAGS
+
+    - name: Build BusyBox
+      run: |
+        make -j$(nproc) \
+             ARCH=${{ steps.arch_vars.outputs.ARCH }} \
+             CROSS_COMPILE=${{ steps.arch_vars.outputs.CROSS_COMPILE }} \
+             CFLAGS="-Os -pipe -march=${{ steps.arch_vars.outputs.ARCH }} -static" \
+             LDFLAGS="-static" \
+             SKIP_STRIP=n
+        
+        # Cek hasil build
+        file busybox
+        ls -lh busybox
+        
+        # Strip binary (opsional, sudah dilakukan oleh SKIP_STRIP=n)
+        # ${{ steps.arch_vars.outputs.CROSS_COMPILE }}strip -s busybox
+
+    - name: Test binary with QEMU
+      run: |
+        sudo apt-get install -y qemu-user-static
+        
+        if [ "${{ matrix.arch }}" = "armv7l" ]; then
+          qemu-arm-static ./busybox --help
+          qemu-arm-static ./busybox --version
+        elif [ "${{ matrix.arch }}" = "aarch64" ]; then
+          qemu-aarch64-static ./busybox --help
+          qemu-aarch64-static ./busybox --version
+        fi
+
+    - name: Show binary info
+      run: |
+        echo "=== Binary Information ==="
+        file busybox
+        echo ""
+        echo "=== Size ==="
+        ls -lh busybox
+        echo ""
+        echo "=== Static Check ==="
+        ldd busybox || echo "Static binary (no dynamic dependencies)"
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: busybox-static-${{ steps.arch_vars.outputs.TARGET }}
+        path: |
+          busybox
+          busybox_unstripped
+          .config
+        retention-days: 30
+        compression-level: 6
+
+    - name: Create release package
+      if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+      run: |
+        mkdir -p release/
+        cp busybox release/busybox-${{ steps.arch_vars.outputs.TARGET }}
+        cp .config release/config-${{ steps.arch_vars.outputs.TARGET }}.txt
+        
+        # Buat tarball
+        tar -czf busybox-${{ steps.arch_vars.outputs.TARGET }}-static.tar.gz \
+            -C release/ .
+        
+        # Buat checksum
+        sha256sum busybox-${{ steps.arch_vars.outputs.TARGET }}-static.tar.gz > \
+          busybox-${{ steps.arch_vars.outputs.TARGET }}-static.tar.gz.sha256
+
+    - name: Upload release assets
+      if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-${{ steps.arch_vars.outputs.TARGET }}
+        path: |
+          busybox-${{ steps.arch_vars.outputs.TARGET }}-static.tar.gz
+          busybox-${{ steps.arch_vars.outputs.TARGET }}-static.tar.gz.sha256
+        retention-days: 90
