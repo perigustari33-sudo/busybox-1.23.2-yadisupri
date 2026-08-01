@@ -1,0 +1,50 @@
+name: Build BusyBox Static for MDM9607
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download ARM Official GCC 4.9.4
+      run: |
+        # Gunakan link alternatif dari ARM Developer
+        wget -c https://developer.arm.com/-/media/Files/downloads/gnu-rm/4.9-2015q3/gcc-arm-none-eabi-4_9-2015q3-20150921-linux.tar.bz2
+        tar xf gcc-arm-none-eabi-4_9-2015q3-20150921-linux.tar.bz2
+        echo "$(pwd)/gcc-arm-none-eabi-4_9-2015q3/bin" >> $GITHUB_PATH
+        
+        # Verifikasi
+        arm-none-eabi-gcc --version
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y make qemu-user-static
+
+    - name: Configure and build
+      run: |
+        export CROSS_COMPILE=arm-none-eabi-
+        export ARCH=arm
+        
+        make defconfig
+        echo "CONFIG_STATIC=y" >> .config
+        echo "# CONFIG_FEATURE_SHARED_BUSYBOX is not set" >> .config
+        sed -i 's/^CONFIG_SHA1_HWACCEL=y/# CONFIG_SHA1_HWACCEL is not set/' .config
+        sed -i 's/^CONFIG_SHA256_HWACCEL=y/# CONFIG_SHA256_HWACCEL is not set/' .config
+        make oldconfig
+        
+        make -j$(nproc) \
+             CFLAGS="-Os -pipe -static -march=armv7-a -mfpu=vfpv4-d16 -mfloat-abi=hard" \
+             LDFLAGS="-static" \
+             SKIP_STRIP=n
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: busybox-mdm9607
+        path: busybox
