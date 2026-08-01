@@ -1,4 +1,4 @@
-name: Build BusyBox 1.23.2 with GCC
+name: Build BusyBox 1.23.2 for MDM9607
 
 on:
   workflow_dispatch:
@@ -11,35 +11,52 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Install ARM GCC
+    - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y gcc-arm-linux-gnueabihf binutils-arm-linux-gnueabihf make
+        sudo apt-get install -y \
+          gcc-arm-linux-gnueabihf \
+          binutils-arm-linux-gnueabihf \
+          libc6-dev-armhf-cross \
+          make
 
-    - name: Configure and build
+    - name: Configure BusyBox
       run: |
         export CROSS_COMPILE=arm-linux-gnueabihf-
         export ARCH=arm
         
-        # Defconfig dengan jawaban otomatis
-        yes "" | make defconfig
+        # Buat konfigurasi minimal
+        make defconfig
         
-        # Set static build
+        # Static build
         echo "CONFIG_STATIC=y" >> .config
+        echo "CONFIG_CROSS_COMPILER_PREFIX=\"arm-linux-gnueabihf-\"" >> .config
+        
+        # Nonaktifkan fitur yang bermasalah
         sed -i 's/^CONFIG_DATE=y/# CONFIG_DATE is not set/' .config
+        sed -i 's/^CONFIG_FEATURE_CROND_D=y/# CONFIG_FEATURE_CROND_D is not set/' .config
+        sed -i 's/^CONFIG_FEATURE_UDHCP_PORT=y/# CONFIG_FEATURE_UDHCP_PORT is not set/' .config
         
         # Update config
-        yes "" | make oldconfig
+        make oldconfig
+
+    - name: Build BusyBox
+      run: |
+        export CROSS_COMPILE=arm-linux-gnueabihf-
+        export ARCH=arm
         
-        # Build
+        # Build dengan flag yang lebih sederhana
         make -j$(nproc) \
-          CFLAGS="-Os -pipe -static -march=armv7-a -mfpu=vfpv4-d16 -mfloat-abi=hard" \
-          LDFLAGS="-static"
+          CFLAGS="-Os -pipe -static -march=armv7-a -mfloat-abi=hard" \
+          LDFLAGS="-static" \
+          SKIP_STRIP=n
 
     - name: Upload artifacts
       if: success()
       uses: actions/upload-artifact@v4
       with:
         name: busybox-1.23.2-arm
-        path: busybox
+        path: |
+          busybox
+          .config
         retention-days: 30
