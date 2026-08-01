@@ -1,4 +1,4 @@
-name: Build BusyBox Static for MDM9607 (Linaro GCC 4.9)
+name: Build BusyBox Static for MDM9607
 
 on:
   workflow_dispatch:
@@ -11,24 +11,24 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Download Linaro GCC 4.9
-      run: |
-        # Gunakan link dari archive.linaro.org
-        wget -c https://releases.linaro.org/archive/14.11/components/toolchain/binaries/arm-linux-gnueabihf/gcc-linaro-4.9-2014.11-x86_64_arm-linux-gnueabihf.tar.xz
-        tar xf gcc-linaro-4.9-2014.11-x86_64_arm-linux-gnueabihf.tar.xz
-        echo "$(pwd)/gcc-linaro-4.9-2014.11-x86_64_arm-linux-gnueabihf/bin" >> $GITHUB_PATH
-        
-        # Verifikasi
-        arm-linux-gnueabihf-gcc --version
-
     - name: Install dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y make qemu-user-static
 
+    - name: Download ARM GNU Toolchain (arm-none-linux-gnueabihf)
+      run: |
+        # Menggunakan mirror resmi dari ARM Developer
+        wget -c https://developer.arm.com/-/media/Files/downloads/gnu/13.2.rel1/binrel/arm-gnu-toolchain-13.2.rel1-x86_64-arm-none-linux-gnueabihf.tar.xz
+        tar xf arm-gnu-toolchain-13.2.rel1-x86_64-arm-none-linux-gnueabihf.tar.xz
+        echo "$(pwd)/arm-gnu-toolchain-13.2.rel1-x86_64-arm-none-linux-gnueabihf/bin" >> $GITHUB_PATH
+        
+        # Verifikasi
+        arm-none-linux-gnueabihf-gcc --version
+
     - name: Configure and build
       run: |
-        export CROSS_COMPILE=arm-linux-gnueabihf-
+        export CROSS_COMPILE=arm-none-linux-gnueabihf-
         export ARCH=arm
         
         make defconfig
@@ -43,8 +43,12 @@ jobs:
              LDFLAGS="-static" \
              SKIP_STRIP=n
 
+    - name: Test binary with QEMU
+      run: |
+        qemu-arm-static ./busybox --version
+
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: busybox-mdm9607-linaro49
+        name: busybox-mdm9607
         path: busybox
