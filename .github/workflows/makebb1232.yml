@@ -1,4 +1,4 @@
-name: Build BusyBox Static for MDM9607 with Android NDK
+name: Build BusyBox 1.23.2 with GCC
 
 on:
   workflow_dispatch:
@@ -11,205 +11,35 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Setup Android NDK
+    - name: Install ARM GCC
       run: |
-        # Download Android NDK r26b
-        wget -c https://dl.google.com/android/repository/android-ndk-r26b-linux.zip
-        unzip -q android-ndk-r26b-linux.zip
-        
-        # Set environment variables
-        export NDK_PATH=$(pwd)/android-ndk-r26b
-        export PATH=$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
-        echo "NDK_PATH=$NDK_PATH" >> $GITHUB_ENV
-        echo "PATH=$PATH" >> $GITHUB_ENV
-        
-        # Verifikasi compiler
-        armv7a-linux-androideabi21-clang --version
+        sudo apt-get update
+        sudo apt-get install -y gcc-arm-linux-gnueabihf binutils-arm-linux-gnueabihf make
 
-    - name: Create config without stime
+    - name: Configure and build
       run: |
-        cat > .config << 'EOF'
-        CONFIG_HAVE_DOT_CONFIG=y
-        CONFIG_DESKTOP=y
-        CONFIG_EXTRA_COMPAT=y
-        CONFIG_INCLUDE_SUSv2=y
-        CONFIG_USE_PORTABLE_CODE=y
-        CONFIG_PLATFORM_LINUX=y
-        CONFIG_FEATURE_BUFFERS_USE_MALLOC=y
-        CONFIG_SHOW_USAGE=y
-        CONFIG_FEATURE_VERBOSE_USAGE=y
-        CONFIG_FEATURE_COMPRESS_USAGE=y
-        CONFIG_LONG_OPTS=y
-        CONFIG_FEATURE_DEVPTS=y
-        CONFIG_FEATURE_CLEAN_UP=y
-        CONFIG_FEATURE_PIDFILE=y
-        CONFIG_FEATURE_SUID=y
-        CONFIG_FEATURE_PREFER_APPLETS=y
-        CONFIG_BUSYBOX_EXEC_PATH="/proc/self/exe"
-        CONFIG_FEATURE_SYSLOG=y
-        CONFIG_STATIC=y
-        CONFIG_LFS=y
-        CONFIG_FEATURE_LFS=y
-        CONFIG_CROSS_COMPILER_PREFIX="armv7a-linux-androideabi21-"
-        CONFIG_EXTRA_CFLAGS="-D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64"
-        CONFIG_INSTALL_APPLET_SYMLINKS=y
-        CONFIG_PREFIX="./_install"
-        CONFIG_FEATURE_EDITING=y
-        CONFIG_FEATURE_EDITING_VI=y
-        CONFIG_FEATURE_TAB_COMPLETION=y
-        CONFIG_FEATURE_EDITING_FANCY_PROMPT=y
-        CONFIG_FEATURE_EDITING_SAVEHISTORY=y
-        CONFIG_FEATURE_EDITING_HISTORY=255
-        
-        # Coreutils - NONAKTIFKAN DATE yang bermasalah
-        # CONFIG_DATE is not set
-        CONFIG_CAT=y
-        CONFIG_ECHO=y
-        CONFIG_FEATURE_FANCY_ECHO=y
-        CONFIG_LS=y
-        CONFIG_FEATURE_LS_FILETYPES=y
-        CONFIG_FEATURE_LS_RECURSIVE=y
-        CONFIG_FEATURE_LS_SORTFILES=y
-        CONFIG_FEATURE_LS_TIMESTAMPS=y
-        CONFIG_FEATURE_LS_USERNAME=y
-        CONFIG_MKDIR=y
-        CONFIG_PWD=y
-        CONFIG_RM=y
-        CONFIG_TRUE=y
-        CONFIG_FALSE=y
-        CONFIG_TEST=y
-        CONFIG_TOUCH=y
-        CONFIG_UNIQ=y
-        CONFIG_WHOAMI=y
-        CONFIG_BASENAME=y
-        CONFIG_DIRNAME=y
-        CONFIG_HEAD=y
-        CONFIG_TAIL=y
-        CONFIG_FEATURE_FANCY_TAIL=y
-        CONFIG_SLEEP=y
-        CONFIG_FEATURE_FANCY_SLEEP=y
-        CONFIG_SYNC=y
-        CONFIG_CP=y
-        CONFIG_MV=y
-        CONFIG_LN=y
-        CONFIG_RMDIR=y
-        CONFIG_CHMOD=y
-        CONFIG_CHOWN=y
-        CONFIG_CHGRP=y
-        
-        # Shells
-        CONFIG_ASH=y
-        CONFIG_ASH_BASH_COMPAT=y
-        CONFIG_ASH_JOB_CONTROL=y
-        CONFIG_ASH_ALIAS=y
-        CONFIG_ASH_GETOPTS=y
-        CONFIG_ASH_BUILTIN_ECHO=y
-        CONFIG_ASH_BUILTIN_PRINTF=y
-        CONFIG_ASH_BUILTIN_TEST=y
-        CONFIG_ASH_CMDCMD=y
-        CONFIG_ASH_OPTIMIZE_FOR_SIZE=y
-        
-        # Linux System Utilities
-        CONFIG_DMESG=y
-        CONFIG_FEATURE_DMESG_PRETTY=y
-        CONFIG_MORE=y
-        CONFIG_MOUNT=y
-        CONFIG_UMOUNT=y
-        
-        # Process Utilities
-        CONFIG_FREE=y
-        CONFIG_KILL=y
-        CONFIG_KILLALL=y
-        CONFIG_PS=y
-        CONFIG_FEATURE_PS_WIDE=y
-        CONFIG_FEATURE_PS_TIME=y
-        CONFIG_FEATURE_PS_ADDITIONAL_COLUMNS=y
-        CONFIG_TOP=y
-        CONFIG_FEATURE_TOP_CPU_USAGE_PERCENTAGE=y
-        CONFIG_FEATURE_TOP_DECIMALS=y
-        CONFIG_FEATURE_TOP_SMP_PROCESS=y
-        CONFIG_UPTIME=y
-        
-        # Networking Utilities
-        CONFIG_PING=y
-        CONFIG_WGET=y
-        CONFIG_FEATURE_WGET_STATUSBAR=y
-        CONFIG_FEATURE_WGET_AUTHENTICATION=y
-        
-        # Editors
-        CONFIG_VI=y
-        CONFIG_FEATURE_VI_MAX_LEN=1024
-        CONFIG_FEATURE_VI_COLON=y
-        CONFIG_FEATURE_VI_YANKMARK=y
-        CONFIG_FEATURE_VI_SEARCH=y
-        CONFIG_FEATURE_VI_USE_SIGNALS=y
-        CONFIG_FEATURE_VI_DOT_CMD=y
-        
-        # Init Utilities
-        CONFIG_INIT=y
-        CONFIG_FEATURE_USE_INITTAB=y
-        CONFIG_FEATURE_INIT_SCTTY=y
-        CONFIG_FEATURE_INIT_SYSLOG=y
-        CONFIG_FEATURE_INIT_COREDUMPS=y
-        CONFIG_HALT=y
-        
-        # Archival Utilities
-        CONFIG_GUNZIP=y
-        CONFIG_GZIP=y
-        CONFIG_TAR=y
-        CONFIG_FEATURE_TAR_CREATE=y
-        CONFIG_FEATURE_TAR_AUTODETECT=y
-        CONFIG_FEATURE_TAR_FROM=y
-        CONFIG_UNZIP=y
-        
-        # Login/Password
-        CONFIG_GETTY=y
-        CONFIG_LOGIN=y
-        CONFIG_PASSWD=y
-        CONFIG_FEATURE_PASSWD_WEAK_CHECK=y
-        EOF
-
-    - name: Build BusyBox with fixes
-      run: |
-        export CC=armv7a-linux-androideabi21-clang
-        export CXX=armv7a-linux-androideabi21-clang++
-        export AR=llvm-ar
-        export AS=llvm-as
-        export LD=ld.lld
-        export STRIP=llvm-strip
-        export CROSS_COMPILE=armv7a-linux-androideabi21-
+        export CROSS_COMPILE=arm-linux-gnueabihf-
         export ARCH=arm
         
-        # Build dengan flags tambahan untuk suppress warnings
+        # Defconfig dengan jawaban otomatis
+        yes "" | make defconfig
+        
+        # Set static build
+        echo "CONFIG_STATIC=y" >> .config
+        sed -i 's/^CONFIG_DATE=y/# CONFIG_DATE is not set/' .config
+        
+        # Update config
+        yes "" | make oldconfig
+        
+        # Build
         make -j$(nproc) \
-          CC="$CC" \
-          CXX="$CXX" \
-          AR="$AR" \
-          AS="$AS" \
-          LD="$LD" \
-          STRIP="$STRIP" \
-          CFLAGS="-Os -pipe -static -march=armv7-a -mfpu=vfpv4-d16 -mfloat-abi=softfp -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64 -Wno-implicit-function-declaration -Wno-string-plus-int" \
-          LDFLAGS="-static" \
-          SKIP_STRIP=n
-
-    - name: Check build result
-      run: |
-        echo "=== Build Result ==="
-        if [ -f busybox ]; then
-          file busybox
-          ls -lh busybox
-          echo "Build successful!"
-        else
-          echo "Build failed!"
-          exit 1
-        fi
+          CFLAGS="-Os -pipe -static -march=armv7-a -mfpu=vfpv4-d16 -mfloat-abi=hard" \
+          LDFLAGS="-static"
 
     - name: Upload artifacts
       if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: busybox-mdm9607-ndk
-        path: |
-          busybox
-          .config
+        name: busybox-1.23.2-arm
+        path: busybox
         retention-days: 30
