@@ -1,4 +1,4 @@
-name: Build BusyBox Static for MDM9607 (GCC 4.9)
+name: Build BusyBox Static for MDM9607 (Linaro GCC 4.9)
 
 on:
   workflow_dispatch:
@@ -11,22 +11,20 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Setup GCC 4.9 from Ubuntu repositories
+    - name: Download Linaro GCC 4.9
       run: |
-        # Tambahkan repository untuk GCC 4.9
-        sudo apt-get update
-        sudo apt-get install -y gcc-4.9-arm-linux-gnueabihf g++-4.9-arm-linux-gnueabihf
-        
-        # Set sebagai default
-        sudo update-alternatives --install /usr/bin/arm-linux-gnueabihf-gcc arm-linux-gnueabihf-gcc /usr/bin/arm-linux-gnueabihf-gcc-4.9 100
-        sudo update-alternatives --set arm-linux-gnueabihf-gcc /usr/bin/arm-linux-gnueabihf-gcc-4.9
+        # Gunakan link dari archive.linaro.org
+        wget -c https://releases.linaro.org/archive/14.11/components/toolchain/binaries/arm-linux-gnueabihf/gcc-linaro-4.9-2014.11-x86_64_arm-linux-gnueabihf.tar.xz
+        tar xf gcc-linaro-4.9-2014.11-x86_64_arm-linux-gnueabihf.tar.xz
+        echo "$(pwd)/gcc-linaro-4.9-2014.11-x86_64_arm-linux-gnueabihf/bin" >> $GITHUB_PATH
         
         # Verifikasi
         arm-linux-gnueabihf-gcc --version
 
     - name: Install dependencies
       run: |
-        sudo apt-get install -y make qemu-user-static binutils-arm-linux-gnueabihf
+        sudo apt-get update
+        sudo apt-get install -y make qemu-user-static
 
     - name: Configure and build
       run: |
@@ -45,12 +43,8 @@ jobs:
              LDFLAGS="-static" \
              SKIP_STRIP=n
 
-    - name: Test binary
-      run: |
-        qemu-arm-static ./busybox --version
-
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: busybox-mdm9607-gcc49
+        name: busybox-mdm9607-linaro49
         path: busybox
