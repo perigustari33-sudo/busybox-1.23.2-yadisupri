@@ -1,4 +1,4 @@
-name: Build BusyBox 1.23.2 for MDM9607
+name: Build BusyBox 1.23.2 for MDM9607 (Soft-Float)
 
 on:
   workflow_dispatch:
@@ -15,39 +15,29 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y \
-          gcc-arm-linux-gnueabihf \
-          binutils-arm-linux-gnueabihf \
-          libc6-dev-armhf-cross \
+          gcc-arm-linux-gnueabi \
+          binutils-arm-linux-gnueabi \
+          libc6-dev-armel-cross \
           make
 
     - name: Configure BusyBox
       run: |
-        export CROSS_COMPILE=arm-linux-gnueabihf-
+        export CROSS_COMPILE=arm-linux-gnueabi-
         export ARCH=arm
         
-        # Buat konfigurasi minimal
         make defconfig
-        
-        # Static build
         echo "CONFIG_STATIC=y" >> .config
-        echo "CONFIG_CROSS_COMPILER_PREFIX=\"arm-linux-gnueabihf-\"" >> .config
-        
-        # Nonaktifkan fitur yang bermasalah
+        echo "CONFIG_CROSS_COMPILER_PREFIX=\"arm-linux-gnueabi-\"" >> .config
         sed -i 's/^CONFIG_DATE=y/# CONFIG_DATE is not set/' .config
-        sed -i 's/^CONFIG_FEATURE_CROND_D=y/# CONFIG_FEATURE_CROND_D is not set/' .config
-        sed -i 's/^CONFIG_FEATURE_UDHCP_PORT=y/# CONFIG_FEATURE_UDHCP_PORT is not set/' .config
-        
-        # Update config
         make oldconfig
 
     - name: Build BusyBox
       run: |
-        export CROSS_COMPILE=arm-linux-gnueabihf-
+        export CROSS_COMPILE=arm-linux-gnueabi-
         export ARCH=arm
         
-        # Build dengan flag yang lebih sederhana
         make -j$(nproc) \
-          CFLAGS="-Os -pipe -static -march=armv7-a -mfloat-abi=hard" \
+          CFLAGS="-Os -pipe -static -march=armv7-a -mfloat-abi=soft" \
           LDFLAGS="-static" \
           SKIP_STRIP=n
 
@@ -55,8 +45,6 @@ jobs:
       if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: busybox-1.23.2-arm
-        path: |
-          busybox
-          .config
+        name: busybox-1.23.2-arm-softfloat
+        path: busybox
         retention-days: 30
