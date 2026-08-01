@@ -1,4 +1,4 @@
-name: Build BusyBox 1.23.2 for MDM9607 (Soft-Float)
+name: Build BusyBox with GCC 4.9
 
 on:
   workflow_dispatch:
@@ -11,40 +11,40 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Install dependencies
+    - name: Install GCC 4.9
       run: |
         sudo apt-get update
         sudo apt-get install -y \
-          gcc-arm-linux-gnueabi \
-          binutils-arm-linux-gnueabi \
-          libc6-dev-armel-cross \
+          gcc-4.9-arm-linux-gnueabihf \
+          binutils-arm-linux-gnueabihf \
+          libc6-dev-armhf-cross \
           make
+        
+        # Set GCC 4.9 sebagai default
+        sudo update-alternatives --install /usr/bin/arm-linux-gnueabihf-gcc arm-linux-gnueabihf-gcc /usr/bin/arm-linux-gnueabihf-gcc-4.9 100
+        sudo update-alternatives --set arm-linux-gnueabihf-gcc /usr/bin/arm-linux-gnueabihf-gcc-4.9
+        
+        arm-linux-gnueabihf-gcc --version
 
-    - name: Configure BusyBox
+    - name: Build BusyBox
       run: |
-        export CROSS_COMPILE=arm-linux-gnueabi-
+        export CROSS_COMPILE=arm-linux-gnueabihf-
         export ARCH=arm
         
         make defconfig
         echo "CONFIG_STATIC=y" >> .config
-        echo "CONFIG_CROSS_COMPILER_PREFIX=\"arm-linux-gnueabi-\"" >> .config
+        echo "CONFIG_CROSS_COMPILER_PREFIX=\"arm-linux-gnueabihf-\"" >> .config
         sed -i 's/^CONFIG_DATE=y/# CONFIG_DATE is not set/' .config
         make oldconfig
-
-    - name: Build BusyBox
-      run: |
-        export CROSS_COMPILE=arm-linux-gnueabi-
-        export ARCH=arm
         
         make -j$(nproc) \
-          CFLAGS="-Os -pipe -static -march=armv7-a -mfloat-abi=soft" \
-          LDFLAGS="-static" \
-          SKIP_STRIP=n
+          CFLAGS="-Os -pipe -static" \
+          LDFLAGS="-static"
 
     - name: Upload artifacts
       if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: busybox-1.23.2-arm-softfloat
+        name: busybox-gcc49
         path: busybox
         retention-days: 30
