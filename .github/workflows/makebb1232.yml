@@ -1,4 +1,4 @@
-name: Build BusyBox Static for MDM9607
+name: Build BusyBox Static for MDM9607 (GCC 4.9)
 
 on:
   workflow_dispatch:
@@ -11,24 +11,26 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Download ARM Official GCC 4.9.4
+    - name: Setup GCC 4.9 from Ubuntu repositories
       run: |
-        # Gunakan link alternatif dari ARM Developer
-        wget -c https://launchpad.net/gcc-arm-embedded/4.9/4.9-2015-q3-update/+download/gcc-arm-none-eabi-4_9-2015q3-20150921-linux.tar.bz2
-        tar xf gcc-arm-none-eabi-4_9-2015q3-20150921-linux.tar.bz2
-        echo "$(pwd)/gcc-arm-none-eabi-4_9-2015q3/bin" >> $GITHUB_PATH
+        # Tambahkan repository untuk GCC 4.9
+        sudo apt-get update
+        sudo apt-get install -y gcc-4.9-arm-linux-gnueabihf g++-4.9-arm-linux-gnueabihf
+        
+        # Set sebagai default
+        sudo update-alternatives --install /usr/bin/arm-linux-gnueabihf-gcc arm-linux-gnueabihf-gcc /usr/bin/arm-linux-gnueabihf-gcc-4.9 100
+        sudo update-alternatives --set arm-linux-gnueabihf-gcc /usr/bin/arm-linux-gnueabihf-gcc-4.9
         
         # Verifikasi
-        arm-none-eabi-gcc --version
+        arm-linux-gnueabihf-gcc --version
 
     - name: Install dependencies
       run: |
-        sudo apt-get update
-        sudo apt-get install -y make qemu-user-static
+        sudo apt-get install -y make qemu-user-static binutils-arm-linux-gnueabihf
 
     - name: Configure and build
       run: |
-        export CROSS_COMPILE=arm-none-eabi-
+        export CROSS_COMPILE=arm-linux-gnueabihf-
         export ARCH=arm
         
         make defconfig
@@ -43,8 +45,12 @@ jobs:
              LDFLAGS="-static" \
              SKIP_STRIP=n
 
+    - name: Test binary
+      run: |
+        qemu-arm-static ./busybox --version
+
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: busybox-mdm9607
+        name: busybox-mdm9607-gcc49
         path: busybox
