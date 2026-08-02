@@ -1,4 +1,4 @@
-name: Build BusyBox with GCC
+name: Build BusyBox with GCC (Patched)
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Install Cross Compiler and dependencies
+    - name: Install Cross Compiler
       run: |
         sudo apt-get update
         sudo apt-get install -y \
@@ -19,40 +19,31 @@ jobs:
           g++-arm-linux-gnueabihf \
           binutils-arm-linux-gnueabihf \
           libc6-dev-armhf-cross \
-          make \
-          bc \
-          bison \
-          flex \
-          cpio \
-          libtirpc-dev \
-          rpcsvc-proto
-        
-        # Verify compiler
-        arm-linux-gnueabihf-gcc --version
+          make bc bison flex cpio
 
-    - name: Build BusyBox with config
+    - name: Build BusyBox
       run: |
         export CROSS_COMPILE=arm-linux-gnueabihf-
         export ARCH=arm
         
-        # Copy your config
+        # Copy config
         cp configs/k02a.config .config
-        echo "CONFIG_STATIC=y" >> .config
         
-        # Disable Werror and RPC if causing issues
+        # Use sed to disable INETD completely
+        sed -i 's/^CONFIG_INETD=y/# CONFIG_INETD is not set/' .config
+        sed -i 's/^CONFIG_FEATURE_INETD_RPC=y/# CONFIG_FEATURE_INETD_RPC is not set/' .config
+        sed -i 's/^CONFIG_FEATURE_INETD_SUPPORT_BUILTIN_ECHO=y/# CONFIG_FEATURE_INETD_SUPPORT_BUILTIN_ECHO is not set/' .config
+        sed -i 's/^CONFIG_FEATURE_INETD_SUPPORT_BUILTIN_DISCARD=y/# CONFIG_FEATURE_INETD_SUPPORT_BUILTIN_DISCARD is not set/' .config
+        sed -i 's/^CONFIG_FEATURE_INETD_SUPPORT_BUILTIN_TIME=y/# CONFIG_FEATURE_INETD_SUPPORT_BUILTIN_TIME is not set/' .config
+        sed -i 's/^CONFIG_FEATURE_INETD_SUPPORT_BUILTIN_DAYTIME=y/# CONFIG_FEATURE_INETD_SUPPORT_BUILTIN_DAYTIME is not set/' .config
+        sed -i 's/^CONFIG_FEATURE_INETD_SUPPORT_BUILTIN_CHARGEN=y/# CONFIG_FEATURE_INETD_SUPPORT_BUILTIN_CHARGEN is not set/' .config
+        
+        # Add static and disable Werror
+        echo "CONFIG_STATIC=y" >> .config
         echo "CFLAGS += -Wno-error -Wno-unused-result" >> .config
         
         make oldconfig
-        
-        # Build with additional include paths for RPC
-        make -j$(nproc) \
-          CFLAGS="-Wno-error -Wno-unused-result -I/usr/include/tirpc" \
-          LDFLAGS="-ltirpc"
-
-    - name: Verify build
-      run: |
-        file busybox
-        ls -lh busybox
+        make -j$(nproc) CFLAGS="-Wno-error -Wno-unused-result"
 
     - name: Upload artifacts
       if: success()
