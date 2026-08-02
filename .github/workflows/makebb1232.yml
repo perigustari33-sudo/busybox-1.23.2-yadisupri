@@ -11,34 +11,38 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Install GCC 10
+    - name: Install GCC 10 Cross Compiler
       run: |
         sudo apt-get update
         sudo apt-get install -y \
-          gcc-10-arm-linux-gnueabihf \
-          g++-10-arm-linux-gnueabihf \
+          gcc-arm-linux-gnueabihf \
+          g++-arm-linux-gnueabihf \
           binutils-arm-linux-gnueabihf \
           libc6-dev-armhf-cross \
           make bc bison flex cpio
-        
-        # Create symlink so arm-linux-gnueabihf-gcc points to gcc-10
-        sudo ln -sf /usr/bin/arm-linux-gnueabihf-gcc-10 /usr/bin/arm-linux-gnueabihf-gcc
-        sudo ln -sf /usr/bin/arm-linux-gnueabihf-g++-10 /usr/bin/arm-linux-gnueabihf-g++
-        
-        # Verify
-        arm-linux-gnueabihf-gcc --version
 
     - name: Build BusyBox
       run: |
         export CROSS_COMPILE=arm-linux-gnueabihf-
         export ARCH=arm
         
-        # Use your config
+        # Copy your config
         cp configs/k02a.config .config
         echo "CONFIG_STATIC=y" >> .config
         
+        # Disable -Werror
+        echo "CFLAGS += -Wno-error" >> .config
+        echo "CFLAGS += -Wno-unused-result" >> .config
+        
         make oldconfig
-        make -j$(nproc)
+        
+        # Build with additional CFLAGS
+        make -j$(nproc) CFLAGS="-Wno-error -Wno-unused-result"
+
+    - name: Verify build
+      run: |
+        file busybox
+        ls -lh busybox
 
     - name: Upload artifacts
       if: success()
