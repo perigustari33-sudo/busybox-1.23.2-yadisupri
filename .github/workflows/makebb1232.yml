@@ -1,4 +1,4 @@
-name: Build BusyBox with GCC 4.9
+name: Build BusyBox with GCC 10
 
 on:
   workflow_dispatch:
@@ -11,32 +11,31 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Build with Docker
+    - name: Install GCC 10
       run: |
-        # Create Dockerfile
-        cat > Dockerfile << 'EOF'
-        FROM ubuntu:18.04
+        sudo apt-get update
+        sudo apt-get install -y \
+          gcc-10-arm-linux-gnueabihf \
+          g++-10-arm-linux-gnueabihf \
+          binutils-arm-linux-gnueabihf \
+          libc6-dev-armhf-cross \
+          make bc bison flex cpio
         
-        RUN apt-get update && apt-get install -y \
-            gcc-4.9-arm-linux-gnueabihf \
-            binutils-arm-linux-gnueabihf \
-            libc6-dev-armhf-cross \
-            make bc bison flex \
-            && rm -rf /var/lib/apt/lists/*
+        # Set environment variables
+        echo "CROSS_COMPILE=arm-linux-gnueabihf-" >> $GITHUB_ENV
+        echo "ARCH=arm" >> $GITHUB_ENV
+        echo "CC=arm-linux-gnueabihf-gcc-10" >> $GITHUB_ENV
         
-        WORKDIR /build
-        COPY . .
-        RUN cp configs/k02a.config .config && \
-            echo "CONFIG_STATIC=y" >> .config && \
-            make oldconfig && \
-            make -j$(nproc) CC=arm-linux-gnueabihf-gcc-4.9
-        EOF
+        arm-linux-gnueabihf-gcc-10 --version
+
+    - name: Build BusyBox
+      run: |
+        # Use your config
+        cp configs/k02a.config .config
+        echo "CONFIG_STATIC=y" >> .config
         
-        # Build with Docker
-        docker build -t busybox-builder .
-        
-        # Extract the binary
-        docker run --rm -v $(pwd):/output busybox-builder cp busybox /output/
+        make oldconfig
+        make -j$(nproc)
         
         file busybox
 
@@ -44,6 +43,6 @@ jobs:
       if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: busybox-gcc49
+        name: busybox-gcc10
         path: busybox
         retention-days: 30
