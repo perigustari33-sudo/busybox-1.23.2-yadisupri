@@ -1,4 +1,4 @@
-name: Build BusyBox with GCC (Patched Source)
+name: Build BusyBox with GCC (Alpine)
 
 on:
   workflow_dispatch:
@@ -11,119 +11,26 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Install Cross Compiler
+    - name: Build with Alpine Linux (musl libc)
       run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          gcc-arm-linux-gnueabihf \
-          g++-arm-linux-gnueabihf \
-          binutils-arm-linux-gnueabihf \
-          libc6-dev-armhf-cross \
-          make bc bison flex cpio
-
-    - name: Patch source code for glibc compatibility
-      run: |
-        # Fix stime issue in date.c
-        cat > fix_date.patch << 'EOF'
-        --- a/coreutils/date.c
-        +++ b/coreutils/date.c
-        @@ -293,7 +293,8 @@
-                if (opt & OPT_SET) {
-                        /* If setting time, try to set it */
-        -               if ((opt & OPT_SET) && stime(&ts.tv_sec) < 0) {
-        +               struct timespec ts_set = { .tv_sec = ts.tv_sec, .tv_nsec = 0 };
-        +               if ((opt & OPT_SET) && clock_settime(CLOCK_REALTIME, &ts_set) < 0) {
-                                bb_perror_msg("can't set date");
-                        }
-                }
-        EOF
-        patch -p1 < fix_date.patch
-
-        # Fix stime issue in rdate.c
-        cat > fix_rdate.patch << 'EOF'
-        --- a/util-linux/rdate.c
-        +++ b/util-linux/rdate.c
-        @@ -68,7 +68,9 @@
-                        remote_time = ntohl(remote_time);
-        -               if (stime(&remote_time) < 0)
-        +               struct timespec ts;
-        +               ts.tv_sec = remote_time;
-        +               ts.tv_nsec = 0;
-        +               if (clock_settime(CLOCK_REALTIME, &ts) < 0)
-                                bb_perror_msg_and_die("can't set date");
-                        return EXIT_SUCCESS;
-        EOF
-        patch -p1 < fix_rdate.patch
-
-        # Fix BUG_need_to_implement_gettimeofday_ns in runsv.c
-        cat > fix_runsv.patch << 'EOF'
-        --- a/runit/runsv.c
-        +++ b/runit/runsv.c
-        @@ -17,9 +17,11 @@
-        -#define gettimeofday_ns() ({ struct timeval t; gettimeofday(&t, NULL); t.tv_sec*1000000000LL + t.tv_usec*1000; })
-        +#ifndef gettimeofday_ns
-        +#define gettimeofday_ns() ({ struct timespec t; clock_gettime(CLOCK_REALTIME, &t); t.tv_sec*1000000000LL + t.tv_nsec; })
-        +#endif
-        EOF
-        patch -p1 < fix_runsv.patch
-
-        # Fix mktemp warning (optional, just to clean warnings)
-        cat > fix_mktemp.patch << 'EOF'
-        --- a/debianutils/mktemp.c
-        +++ b/debianutils/mktemp.c
-        @@ -63,7 +63,7 @@
-                if (argv[0])
-                        *argv++ = template;
-        -       if (mkstemp(template) < 0)
-        +       if (mkstemp(template) == -1)
-                                bb_perror_msg_and_die("failed to create temp file");
-        EOF
-        patch -p1 < fix_mktemp.patch || true
-
-        # Show patch status
-        echo "=== Patch status ==="
-        find . -name "*.c" -exec grep -l "clock_settime" {} \; || true
-
-    - name: Build BusyBox
-      run: |
-        export CROSS_COMPILE=arm-linux-gnueabihf-
-        export ARCH=arm
-        
-        # Copy config
-        cp configs/k02a.config .config
-        
-        # Disable problematic features (just in case)
-        echo "CONFIG_STATIC=y" >> .config
-        echo "CONFIG_INETD=n" >> .config
-        echo "CONFIG_RUNSV=n" >> .config  # Disable runsv to avoid issues
-        echo "CONFIG_RUNSVDIR=n" >> .config
-        echo "CONFIG_SV=n" >> .config
-        echo "CONFIG_SVLOGD=n" >> .config
-        echo "CONFIG_CHPST=n" >> .config
-        echo "CONFIG_SETUIDGID=n" >> .config
-        echo "CONFIG_ENVUIDGID=n" >> .config
-        echo "CONFIG_ENVDIR=n" >> .config
-        echo "CONFIG_SOFTLIMIT=n" >> .config
-        
-        # Disable Werror
-        echo "CFLAGS += -Wno-error -Wno-unused-result -Wno-format" >> .config
-        
-        make oldconfig
-        
-        # Build with additional flags
-        make -j$(nproc) \
-          CFLAGS="-Wno-error -Wno-unused-result -Wno-format -D_GNU_SOURCE"
-
-    - name: Verify build
-      run: |
-        if [ -f busybox ]; then
-          file busybox
-          ls -lh busybox
-          arm-linux-gnueabihf-readelf -h busybox || true
-        else
-          echo "Build failed - busybox not found"
-          exit 1
-        fi
+        docker run --rm -v $(pwd):/build alpine:3.17 /bin/sh -c "
+          apk add --no-cache \
+            gcc-arm-linux-gnueabihf \
+            binutils-arm-linux-gnueabihf \
+            musl-dev-armhf \
+            make bc bison flex cpio && \
+          cd /build && \
+          export CROSS_COMPILE=arm-linux-gnueabihf- && \
+          export ARCH=arm && \
+          cp configs/k02a.config .config && \
+          echo 'CONFIG_STATIC=y' >> .config && \
+          echo 'CONFIG_INETD=n' >> .config && \
+          echo 'CONFIG_RDATE=n' >> .config && \
+          echo 'CONFIG_RUNSV=n' >> .config && \
+          echo 'CFLAGS += -Wno-error' >> .config && \
+          make oldconfig && \
+          make -j\$(nproc) CFLAGS='-Wno-error'
+        "
 
     - name: Upload artifacts
       if: success()
