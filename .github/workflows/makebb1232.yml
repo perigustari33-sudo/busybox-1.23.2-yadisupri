@@ -18,28 +18,34 @@ jobs:
           gcc-4.9-arm-linux-gnueabihf \
           binutils-arm-linux-gnueabihf \
           libc6-dev-armhf-cross \
-          make
+          make \
+          bc \
+          bison \
+          flex
         
-        # Set GCC 4.9 sebagai default
-        sudo update-alternatives --install /usr/bin/arm-linux-gnueabihf-gcc arm-linux-gnueabihf-gcc /usr/bin/arm-linux-gnueabihf-gcc-4.9 100
-        sudo update-alternatives --set arm-linux-gnueabihf-gcc /usr/bin/arm-linux-gnueabihf-gcc-4.9
-        
-        arm-linux-gnueabihf-gcc --version
+        # Verify GCC installation
+        arm-linux-gnueabihf-gcc-4.9 --version
 
-    - name: Build BusyBox
+    - name: Build BusyBox with config
       run: |
         export CROSS_COMPILE=arm-linux-gnueabihf-
         export ARCH=arm
         
-        make defconfig
-        echo "CONFIG_STATIC=y" >> .config
-        echo "CONFIG_CROSS_COMPILER_PREFIX=\"arm-linux-gnueabihf-\"" >> .config
-        sed -i 's/^CONFIG_DATE=y/# CONFIG_DATE is not set/' .config
-        make oldconfig
+        # Copy your specific config
+        cp configs/k02a.config .config
         
-        make -j$(nproc) \
-          CFLAGS="-Os -pipe -static" \
-          LDFLAGS="-static"
+        # Make sure static build is enabled
+        echo "CONFIG_STATIC=y" >> .config
+        
+        # Build with GCC 4.9
+        make oldconfig
+        make -j$(nproc) CC=arm-linux-gnueabihf-gcc-4.9
+
+    - name: Check build result
+      run: |
+        ls -lh busybox
+        file busybox
+        arm-linux-gnueabihf-readelf -h busybox || true
 
     - name: Upload artifacts
       if: success()
