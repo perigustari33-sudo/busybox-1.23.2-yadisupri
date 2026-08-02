@@ -1,97 +1,38 @@
-name: Build BusyBox (Debug)
+name: Build BusyBox with Docker
 
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-22.04  # atau ubuntu-latest
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Show system info
+    - name: Build with Docker Ubuntu 18.04
       run: |
-        echo "=== System Info ==="
-        uname -a
-        cat /etc/os-release
-        gcc --version || true
-        echo "=== Current directory ==="
-        pwd
-        ls -la
-
-    - name: Install Cross Compiler
-      run: |
-        echo "=== Installing packages ==="
-        sudo apt-get update
-        sudo apt-get install -y \
-          gcc-arm-linux-gnueabihf \
-          g++-arm-linux-gnueabihf \
-          binutils-arm-linux-gnueabihf \
-          libc6-dev-armhf-cross \
-          make bc bison flex cpio
-        echo "=== Compiler version ==="
-        arm-linux-gnueabihf-gcc --version || true
-        which arm-linux-gnueabihf-gcc || true
-
-    - name: Show config before build
-      run: |
-        echo "=== Config file content ==="
-        cat configs/k02a.config 2>/dev/null || echo "Config not found"
-        echo "=== Files in configs/ ==="
-        ls -la configs/ || true
-
-    - name: Build BusyBox
-      run: |
-        export CROSS_COMPILE=arm-linux-gnueabihf-
-        export ARCH=arm
-        export VERBOSE=1
-        
-        echo "=== Starting build ==="
-        echo "CROSS_COMPILE=$CROSS_COMPILE"
-        echo "ARCH=$ARCH"
-        
-        # Copy config
-        cp configs/k02a.config .config
-        echo "CONFIG_STATIC=y" >> .config
-        echo "CONFIG_INETD=n" >> .config
-        echo "CONFIG_RDATE=n" >> .config
-        echo "CONFIG_RUNSV=n" >> .config
-        echo "CONFIG_RUNSVDIR=n" >> .config
-        echo "CONFIG_SV=n" >> .config
-        echo "CONFIG_SVLOGD=n" >> .config
-        echo "CONFIG_CHPST=n" >> .config
-        echo "CONFIG_SETUIDGID=n" >> .config
-        echo "CONFIG_ENVUIDGID=n" >> .config
-        echo "CONFIG_ENVDIR=n" >> .config
-        echo "CONFIG_SOFTLIMIT=n" >> .config
-        echo "CFLAGS += -Wno-error" >> .config
-        echo "CFLAGS += -Wno-unused-result" >> .config
-        
-        echo "=== Config after modification ==="
-        grep -E "CONFIG_STATIC|CONFIG_INETD|CONFIG_RDATE|CONFIG_RUNSV|CFLAGS" .config || true
-        
-        echo "=== Running make oldconfig ==="
-        make oldconfig
-        
-        echo "=== Running make ==="
-        make -j$(nproc) V=1 2>&1 | tee build.log
-
-    - name: Check build result
-      run: |
-        echo "=== Build Result ==="
-        if [ -f busybox ]; then
-          echo "✅ Build SUCCESS!"
-          file busybox
-          ls -lh busybox
-          arm-linux-gnueabihf-readelf -h busybox || true
-        else
-          echo "❌ Build FAILED!"
-          echo "=== Last 50 lines of build.log ==="
-          tail -50 build.log 2>/dev/null || true
-          exit 1
-        fi
+        docker run --rm -v $(pwd):/build ubuntu:18.04 /bin/bash -c "
+          apt-get update && \
+          apt-get install -y \
+            gcc-arm-linux-gnueabihf \
+            g++-arm-linux-gnueabihf \
+            binutils-arm-linux-gnueabihf \
+            libc6-dev-armhf-cross \
+            make bc bison flex cpio && \
+          cd /build && \
+          export CROSS_COMPILE=arm-linux-gnueabihf- && \
+          export ARCH=arm && \
+          cp configs/k02a.config .config && \
+          echo 'CONFIG_STATIC=y' >> .config && \
+          echo 'CONFIG_INETD=n' >> .config && \
+          echo 'CONFIG_RDATE=n' >> .config && \
+          echo 'CONFIG_RUNSV=n' >> .config && \
+          echo 'CFLAGS += -Wno-error' >> .config && \
+          make oldconfig && \
+          make -j\$(nproc)
+        "
 
     - name: Upload artifacts
       if: success()
@@ -100,11 +41,3 @@ jobs:
         name: busybox
         path: busybox
         retention-days: 30
-
-    - name: Upload build log if failed
-      if: failure()
-      uses: actions/upload-artifact@v4
-      with:
-        name: build-log
-        path: build.log
-        retention-days: 7
