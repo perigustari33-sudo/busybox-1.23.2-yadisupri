@@ -1,36 +1,38 @@
-name: Build BusyBox with GCC (Alpine)
+name: Build BusyBox
 
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Build with Alpine Linux (musl libc)
+    - name: Install Cross Compiler
       run: |
-        docker run --rm -v $(pwd):/build alpine:3.17 /bin/sh -c "
-          apk add --no-cache \
-            gcc-arm-linux-gnueabihf \
-            binutils-arm-linux-gnueabihf \
-            musl-dev-armhf \
-            make bc bison flex cpio && \
-          cd /build && \
-          export CROSS_COMPILE=arm-linux-gnueabihf- && \
-          export ARCH=arm && \
-          cp configs/k02a.config .config && \
-          echo 'CONFIG_STATIC=y' >> .config && \
-          echo 'CONFIG_INETD=n' >> .config && \
-          echo 'CONFIG_RDATE=n' >> .config && \
-          echo 'CONFIG_RUNSV=n' >> .config && \
-          echo 'CFLAGS += -Wno-error' >> .config && \
-          make oldconfig && \
-          make -j\$(nproc) CFLAGS='-Wno-error'
-        "
+        sudo apt-get update
+        sudo apt-get install -y \
+          gcc-arm-linux-gnueabihf \
+          g++-arm-linux-gnueabihf \
+          binutils-arm-linux-gnueabihf \
+          libc6-dev-armhf-cross \
+          make bc bison flex cpio
+
+    - name: Build BusyBox
+      run: |
+        export CROSS_COMPILE=arm-linux-gnueabihf-
+        export ARCH=arm
+        
+        cp configs/k02a.config .config
+        echo "CONFIG_STATIC=y" >> .config
+        echo "CONFIG_INETD=n" >> .config
+        echo "CFLAGS += -Wno-error" >> .config
+        
+        make oldconfig
+        make -j$(nproc)
 
     - name: Upload artifacts
       if: success()
