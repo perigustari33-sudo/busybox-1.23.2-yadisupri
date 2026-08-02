@@ -24,7 +24,7 @@ jobs:
           cd /build && \
           export CROSS_COMPILE=arm-linux-gnueabihf- && \
           export ARCH=arm && \
-          cp configs/k02a.config .config && \
+          cp configs/android2_defconfig .config && \
           echo 'CONFIG_STATIC=y' >> .config && \
           echo 'CONFIG_INETD=n' >> .config && \
           echo 'CONFIG_RDATE=n' >> .config && \
