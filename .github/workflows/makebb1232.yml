@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04  # atau ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
     - name: Checkout code
@@ -31,7 +31,12 @@ jobs:
           echo 'CONFIG_RUNSV=n' >> .config && \
           echo 'CFLAGS += -Wno-error' >> .config && \
           make oldconfig && \
-          make -j\$(nproc)
+          make -j\$(nproc) && \
+          echo '=== Sebelum strip ===' && \
+          ls -lh busybox && \
+          arm-linux-gnueabihf-strip -s busybox && \
+          echo '=== Sesudah strip ===' && \
+          ls -lh busybox
         "
 
     - name: Upload artifacts
