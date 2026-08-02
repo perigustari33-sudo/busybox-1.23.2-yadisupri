@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04  # Kembali ke Ubuntu 18.04 yang masih support GCC 4.9
 
     steps:
     - name: Checkout code
@@ -23,29 +23,21 @@ jobs:
           bison \
           flex
         
-        # Verify GCC installation
         arm-linux-gnueabihf-gcc-4.9 --version
 
-    - name: Build BusyBox with config
+    - name: Build BusyBox
       run: |
         export CROSS_COMPILE=arm-linux-gnueabihf-
         export ARCH=arm
         
-        # Copy your specific config
+        # Use your config
         cp configs/k02a.config .config
-        
-        # Make sure static build is enabled
         echo "CONFIG_STATIC=y" >> .config
         
-        # Build with GCC 4.9
         make oldconfig
         make -j$(nproc) CC=arm-linux-gnueabihf-gcc-4.9
-
-    - name: Check build result
-      run: |
-        ls -lh busybox
+        
         file busybox
-        arm-linux-gnueabihf-readelf -h busybox || true
 
     - name: Upload artifacts
       if: success()
