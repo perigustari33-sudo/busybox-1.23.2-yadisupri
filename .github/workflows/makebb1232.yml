@@ -21,23 +21,31 @@ jobs:
           libc6-dev-armhf-cross \
           make bc bison flex cpio
         
-        # Set environment variables
-        echo "CROSS_COMPILE=arm-linux-gnueabihf-" >> $GITHUB_ENV
-        echo "ARCH=arm" >> $GITHUB_ENV
-        echo "CC=arm-linux-gnueabihf-gcc-10" >> $GITHUB_ENV
-        
+        # Verify installation
+        which arm-linux-gnueabihf-gcc-10
         arm-linux-gnueabihf-gcc-10 --version
 
     - name: Build BusyBox
       run: |
+        # Set cross compilation variables
+        export CROSS_COMPILE=arm-linux-gnueabihf-
+        export ARCH=arm
+        
         # Use your config
         cp configs/k02a.config .config
         echo "CONFIG_STATIC=y" >> .config
         
+        # Make oldconfig
         make oldconfig
-        make -j$(nproc)
         
+        # Build - CROSS_COMPILE akan otomatis digunakan
+        make -j$(nproc)
+
+    - name: Verify build
+      run: |
         file busybox
+        ls -lh busybox
+        arm-linux-gnueabihf-readelf -h busybox || true
 
     - name: Upload artifacts
       if: success()
