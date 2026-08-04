@@ -24,13 +24,8 @@ jobs:
           cd /build && \
           export CROSS_COMPILE=arm-linux-gnueabihf- && \
           export ARCH=arm && \
-          cp configs/custom_defconfig .config && \
-          echo 'CONFIG_STATIC=y' >> .config && \
-          echo 'CONFIG_INETD=n' >> .config && \
-          echo 'CONFIG_RDATE=n' >> .config && \
-          echo 'CONFIG_RUNSV=n' >> .config && \
-          echo 'CFLAGS += -Wno-error' >> .config && \
-          make oldconfig && \
+       
+          make 1232_config && \
           make -j\$(nproc) && \
           echo '=== Sebelum strip ===' && \
           ls -lh busybox && \
