@@ -16,25 +16,31 @@ jobs:
         docker run --rm -v $(pwd):/build ubuntu:18.04 /bin/bash -c "
           apt-get update && \
           apt-get install -y \
-            gcc-arm-linux-gnueabihf \
-            g++-arm-linux-gnueabihf \
-            binutils-arm-linux-gnueabihf \
-            libc6-dev-armhf-cross \
-            make bc bison flex cpio && \
-          cd /build && \
-          export CROSS_COMPILE=arm-linux-gnueabihf- && \
+            wget tar make bc bison flex cpio && \
+          
+          cd /opt && \
+          wget -q https://launchpad.net/gcc-arm-embedded/4.9/4.9-2015-q3-update/+download/gcc-arm-none-eabi-4_9-2015q3-20150921-linux.tar.bz2 && \
+          tar -xjf gcc-arm-none-eabi-4_9-2015q3-20150921-linux.tar.bz2 && \
+          rm gcc-arm-none-eabi-4_9-2015q3-20150921-linux.tar.bz2 && \
+          
+          export PATH=/opt/gcc-arm-none-eabi-4_9-2015q3/bin:\$PATH && \
+          export CROSS_COMPILE=arm-none-eabi- && \
           export ARCH=arm && \
+          export CFLAGS='-mfloat-abi=hard -mfpu=vfpv3' && \
+          
+          cd /build && \
           cp configs/custom_defconfig .config && \
           echo 'CONFIG_STATIC=y' >> .config && \
           echo 'CONFIG_INETD=n' >> .config && \
           echo 'CONFIG_RDATE=n' >> .config && \
           echo 'CONFIG_RUNSV=n' >> .config && \
           echo 'CFLAGS += -Wno-error' >> .config && \
+          
           make oldconfig && \
           make -j\$(nproc) && \
           echo '=== Sebelum strip ===' && \
           ls -lh busybox && \
-          arm-linux-gnueabihf-strip -s busybox && \
+          arm-none-eabi-strip -s busybox && \
           echo '=== Sesudah strip ===' && \
           ls -lh busybox
         "
