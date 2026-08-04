@@ -20,7 +20,8 @@ jobs:
             g++-arm-linux-gnueabihf \
             binutils-arm-linux-gnueabihf \
             libc6-dev-armhf-cross \
-            make bc bison flex cpio && \
+            make bc bison flex cpio \
+            file && \
           
           cd /build && \
           export CROSS_COMPILE=arm-linux-gnueabihf- && \
@@ -81,7 +82,7 @@ jobs:
           echo '=== Sesudah strip ===' && \
           ls -lh busybox && \
           
-          # Verifikasi
+          # Verifikasi dengan file command (sudah terinstall)
           if [ -f busybox ]; then
             echo '=== Build SUCCESS ===' && \
             file busybox
