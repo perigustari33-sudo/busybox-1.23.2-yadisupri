@@ -26,27 +26,46 @@ jobs:
           export CROSS_COMPILE=arm-linux-gnueabihf- && \
           export ARCH=arm && \
           
-          # Lihat daftar config yang tersedia
-          echo '=== Configs available ===' && \
-          ls -la configs/ | grep -E '1232|android|defconfig' || echo 'No matching configs found' && \
+          # Copy config dari configs/1232_config
+          echo '=== Copying 1232_config ===' && \
+          cp configs/1232_config .config && \
           
-          # Gunakan 1232_config
-          echo '=== Using 1232_config ===' && \
-          make 1232_config && \
-          
-          # Aktifkan static build, init, dan shell
-          echo '=== Enabling STATIC, INIT, and SHELL ===' && \
+          # Aktifkan static build
+          echo '=== Enabling STATIC ===' && \
+          sed -i 's/^# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config || \
           echo 'CONFIG_STATIC=y' >> .config && \
+          
+          # Aktifkan INIT
+          echo '=== Enabling INIT ===' && \
+          sed -i 's/^# CONFIG_INIT is not set/CONFIG_INIT=y/' .config || \
           echo 'CONFIG_INIT=y' >> .config && \
+          
+          sed -i 's/^# CONFIG_FEATURE_INITRD is not set/CONFIG_FEATURE_INITRD=y/' .config || \
           echo 'CONFIG_FEATURE_INITRD=y' >> .config && \
+          
+          # Aktifkan shell
+          echo '=== Enabling SHELL ===' && \
+          sed -i 's/^# CONFIG_ASH is not set/CONFIG_ASH=y/' .config || \
           echo 'CONFIG_ASH=y' >> .config && \
+          
+          sed -i 's/^# CONFIG_FEATURE_SH_IS_ASH is not set/CONFIG_FEATURE_SH_IS_ASH=y/' .config || \
           echo 'CONFIG_FEATURE_SH_IS_ASH=y' >> .config && \
+          
+          # Set cross compiler
+          echo '=== Setting CROSS_COMPILER ===' && \
+          sed -i 's/^CONFIG_CROSS_COMPILER_PREFIX=.*/CONFIG_CROSS_COMPILER_PREFIX=\"arm-linux-gnueabihf-\"/' .config || \
           echo 'CONFIG_CROSS_COMPILER_PREFIX=\"arm-linux-gnueabihf-\"' >> .config && \
+          
+          # Tambahkan extra CFLAGS
           echo 'CONFIG_EXTRA_CFLAGS=\"-Wno-error\"' >> .config && \
           
           # Hapus konflik
           sed -i '/CONFIG_FEATURE_SH_IS_NONE/d' .config && \
           sed -i '/CONFIG_FEATURE_BASH_IS_NONE/d' .config && \
+          
+          # Tampilkan config yang diaktifkan
+          echo '=== Config yang diaktifkan ===' && \
+          grep -E 'CONFIG_STATIC|CONFIG_INIT|CONFIG_ASH|CONFIG_FEATURE_SH_IS_ASH' .config || echo 'Tidak ditemukan' && \
           
           # Update config
           echo '=== Running make oldconfig ===' && \
@@ -68,6 +87,8 @@ jobs:
             file busybox
           else
             echo '=== Build FAILED ===' && \
+            echo 'Mencari file busybox...' && \
+            find . -name 'busybox' -type f 2>/dev/null || echo 'Tidak ditemukan' && \
             exit 1
           fi
         "
