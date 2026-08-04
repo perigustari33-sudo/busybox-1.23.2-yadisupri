@@ -54,14 +54,14 @@ CONFIG_FEATURE_SYSLOG=y
 #
 # Build Options
 #
-# CONFIG_STATIC is not set
+CONFIG_STATIC=y
 # CONFIG_PIE is not set
 # CONFIG_NOMMU is not set
 # CONFIG_BUILD_LIBBUSYBOX is not set
 # CONFIG_FEATURE_INDIVIDUAL is not set
 # CONFIG_FEATURE_SHARED_BUSYBOX is not set
 # CONFIG_LFS is not set
-CONFIG_CROSS_COMPILER_PREFIX="arm-eabi-"
+#CONFIG_CROSS_COMPILER_PREFIX="arm-eabi-"
 #
 # Removed:
 # warning flags:
@@ -80,7 +80,7 @@ CONFIG_CROSS_COMPILER_PREFIX="arm-eabi-"
 # -fno-short-enums
 # -fgcse-after-reload
 # -frename-registers
-CONFIG_EXTRA_CFLAGS="-I$A/system/core/include -I$A/bionic/libc/arch-arm/include -I$A/bionic/libc/include -I$A/bionic/libc/kernel/common -I$A/bionic/libc/kernel/arch-arm -I$A/bionic/libm/include -I$A/bionic/libm/include/arch/arm -include $A/system/core/include/arch/linux-arm/AndroidConfig.h -I$A/system/core/include/arch/linux-arm/ -D__ANDROID__ -DSK_RELEASE -nostdlib -march=armv7-a -msoft-float -mfloat-abi=softfp -mfpu=neon -mthumb -mthumb-interwork -fpic -fno-short-enums -fgcse-after-reload -frename-registers"
+#CONFIG_EXTRA_CFLAGS="-I$A/system/core/include -I$A/bionic/libc/arch-arm/include -I$A/bionic/libc/include -I$A/bionic/libc/kernel/common -I$A/bionic/libc/kernel/arch-arm -I$A/bionic/libm/include -I$A/bionic/libm/include/arch/arm -include $A/system/core/include/arch/linux-arm/AndroidConfig.h -I$A/system/core/include/arch/linux-arm/ -D__ANDROID__ -DSK_RELEASE -nostdlib -march=armv7-a -msoft-float -mfloat-abi=softfp -mfpu=neon -mthumb -mthumb-interwork -fpic -fno-short-enums -fgcse-after-reload -frename-registers"
 
 #
 # Debugging Options
