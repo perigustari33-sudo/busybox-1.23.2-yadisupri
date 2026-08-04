@@ -19,17 +19,33 @@ jobs:
             wget tar make bc bison flex cpio \
             libc6-dev libc6-dev-armhf-cross && \
           
-          # Cek semua versi gcc-arm-linux-gnueabihf yang tersedia
-          echo '=== Mencari versi gcc-arm-linux-gnueabihf yang tersedia ===' && \
-          apt-cache show gcc-arm-linux-gnueabihf | grep -E '^(Package|Version|Depends)' | head -20 && \
+          # Tampilkan semua versi yang tersedia
+          echo '=== SEMUA VERSI GCC-ARM-LINUX-GNUEABIHF ===' && \
+          apt-cache madison gcc-arm-linux-gnueabihf && \
           
-          # Coba install versi 4.9.3 jika ada
-          echo '=== Mencoba install gcc-arm-linux-gnueabihf versi 4.9.3 ===' && \
-          apt-get install -y gcc-arm-linux-gnueabihf=4.9.3-* g++-arm-linux-gnueabihf=4.9.3-* binutils-arm-linux-gnueabihf=2.26-* 2>/dev/null || \
-          echo 'Versi 4.9.3 tidak ditemukan, mencoba versi default' && \
-          apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf binutils-arm-linux-gnueabihf && \
+          echo '=== SEMUA VERSI BINUTILS-ARM-LINUX-GNUEABIHF ===' && \
+          apt-cache madison binutils-arm-linux-gnueabihf && \
           
-          # Tampilkan versi yang terinstall
+          # Install versi spesifik 4.9.3 jika ada
+          GCC_VERSION='' && \
+          for ver in 4.9.3 4.9.2 4.9.1 4.9.0 4.8 4.7 4.6; do \
+            if apt-cache show gcc-arm-linux-gnueabihf=\${ver}-* 2>/dev/null | grep -q '^Version:'; then \
+              GCC_VERSION=\$ver && \
+              echo \"Menemukan GCC versi \$ver\" && \
+              break; \
+            fi; \
+          done && \
+          
+          if [ -n \"\$GCC_VERSION\" ]; then \
+            echo \"=== Menginstall GCC versi \$GCC_VERSION ===\" && \
+            apt-get install -y gcc-arm-linux-gnueabihf=\${GCC_VERSION}-* g++-arm-linux-gnueabihf=\${GCC_VERSION}-* binutils-arm-linux-gnueabihf=2.26-* 2>/dev/null || \
+            apt-get install -y gcc-arm-linux-gnueabihf=\${GCC_VERSION}-* g++-arm-linux-gnueabihf=\${GCC_VERSION}-* binutils-arm-linux-gnueabihf=2.25-* 2>/dev/null || \
+            apt-get install -y gcc-arm-linux-gnueabihf=\${GCC_VERSION}-* g++-arm-linux-gnueabihf=\${GCC_VERSION}-* binutils-arm-linux-gnueabihf; \
+          else \
+            echo \"=== GCC 4.9.x tidak ditemukan, install versi default ===\" && \
+            apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf binutils-arm-linux-gnueabihf; \
+          fi && \
+          
           echo '=== Versi GCC yang terinstall ===' && \
           arm-linux-gnueabihf-gcc --version && \
           
