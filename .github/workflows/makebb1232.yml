@@ -16,17 +16,25 @@ jobs:
         docker run --rm -v $(pwd):/build ubuntu:18.04 /bin/bash -c "
           apt-get update && \
           apt-get install -y \
-            wget tar make bc bison flex cpio && \
+            wget tar make bc bison flex cpio \
+            libc6-dev libc6-dev-armhf-cross && \
           
-          cd /opt && \
-          wget -q https://launchpad.net/gcc-arm-embedded/4.9/4.9-2015-q3-update/+download/gcc-arm-none-eabi-4_9-2015q3-20150921-linux.tar.bz2 && \
-          tar -xjf gcc-arm-none-eabi-4_9-2015q3-20150921-linux.tar.bz2 && \
-          rm gcc-arm-none-eabi-4_9-2015q3-20150921-linux.tar.bz2 && \
+          # Cek semua versi gcc-arm-linux-gnueabihf yang tersedia
+          echo '=== Mencari versi gcc-arm-linux-gnueabihf yang tersedia ===' && \
+          apt-cache show gcc-arm-linux-gnueabihf | grep -E '^(Package|Version|Depends)' | head -20 && \
           
-          export PATH=/opt/gcc-arm-none-eabi-4_9-2015q3/bin:\$PATH && \
-          export CROSS_COMPILE=arm-none-eabi- && \
+          # Coba install versi 4.9.3 jika ada
+          echo '=== Mencoba install gcc-arm-linux-gnueabihf versi 4.9.3 ===' && \
+          apt-get install -y gcc-arm-linux-gnueabihf=4.9.3-* g++-arm-linux-gnueabihf=4.9.3-* binutils-arm-linux-gnueabihf=2.26-* 2>/dev/null || \
+          echo 'Versi 4.9.3 tidak ditemukan, mencoba versi default' && \
+          apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf binutils-arm-linux-gnueabihf && \
+          
+          # Tampilkan versi yang terinstall
+          echo '=== Versi GCC yang terinstall ===' && \
+          arm-linux-gnueabihf-gcc --version && \
+          
+          export CROSS_COMPILE=arm-linux-gnueabihf- && \
           export ARCH=arm && \
-          export CFLAGS='-mfloat-abi=hard -mfpu=vfpv3' && \
           
           cd /build && \
           cp configs/custom_defconfig .config && \
@@ -40,7 +48,7 @@ jobs:
           make -j\$(nproc) && \
           echo '=== Sebelum strip ===' && \
           ls -lh busybox && \
-          arm-none-eabi-strip -s busybox && \
+          arm-linux-gnueabihf-strip -s busybox && \
           echo '=== Sesudah strip ===' && \
           ls -lh busybox
         "
