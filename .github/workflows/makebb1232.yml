@@ -53,14 +53,9 @@ jobs:
           export ARCH=arm && \
           
           cd /build && \
-          cp configs/custom_defconfig .config && \
-          echo 'CONFIG_STATIC=y' >> .config && \
-          echo 'CONFIG_INETD=n' >> .config && \
-          echo 'CONFIG_RDATE=n' >> .config && \
-          echo 'CONFIG_RUNSV=n' >> .config && \
-          echo 'CFLAGS += -Wno-error' >> .config && \
+        
           
-          make oldconfig && \
+          make custom_defconfig && \
           make -j\$(nproc) && \
           echo '=== Sebelum strip ===' && \
           ls -lh busybox && \
