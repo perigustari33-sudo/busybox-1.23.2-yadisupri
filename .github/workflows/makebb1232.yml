@@ -21,17 +21,55 @@ jobs:
             binutils-arm-linux-gnueabihf \
             libc6-dev-armhf-cross \
             make bc bison flex cpio && \
+          
           cd /build && \
           export CROSS_COMPILE=arm-linux-gnueabihf- && \
           export ARCH=arm && \
-       
+          
+          # Lihat daftar config yang tersedia
+          echo '=== Configs available ===' && \
+          ls -la configs/ | grep -E '1232|android|defconfig' || echo 'No matching configs found' && \
+          
+          # Gunakan 1232_config
+          echo '=== Using 1232_config ===' && \
           make 1232_config && \
+          
+          # Aktifkan static build, init, dan shell
+          echo '=== Enabling STATIC, INIT, and SHELL ===' && \
+          echo 'CONFIG_STATIC=y' >> .config && \
+          echo 'CONFIG_INIT=y' >> .config && \
+          echo 'CONFIG_FEATURE_INITRD=y' >> .config && \
+          echo 'CONFIG_ASH=y' >> .config && \
+          echo 'CONFIG_FEATURE_SH_IS_ASH=y' >> .config && \
+          echo 'CONFIG_CROSS_COMPILER_PREFIX=\"arm-linux-gnueabihf-\"' >> .config && \
+          echo 'CONFIG_EXTRA_CFLAGS=\"-Wno-error\"' >> .config && \
+          
+          # Hapus konflik
+          sed -i '/CONFIG_FEATURE_SH_IS_NONE/d' .config && \
+          sed -i '/CONFIG_FEATURE_BASH_IS_NONE/d' .config && \
+          
+          # Update config
+          echo '=== Running make oldconfig ===' && \
+          make oldconfig && \
+          
+          # Build
+          echo '=== Building BusyBox ===' && \
           make -j\$(nproc) && \
+          
           echo '=== Sebelum strip ===' && \
           ls -lh busybox && \
           arm-linux-gnueabihf-strip -s busybox && \
           echo '=== Sesudah strip ===' && \
-          ls -lh busybox
+          ls -lh busybox && \
+          
+          # Verifikasi
+          if [ -f busybox ]; then
+            echo '=== Build SUCCESS ===' && \
+            file busybox
+          else
+            echo '=== Build FAILED ===' && \
+            exit 1
+          fi
         "
 
     - name: Upload artifacts
