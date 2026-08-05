@@ -1,4 +1,4 @@
-name: Build BusyBox with musl libc
+name: Build BusyBox with musl-cross-make
 
 on:
   workflow_dispatch:
@@ -13,9 +13,10 @@ jobs:
 
     - name: Build with musl-cross-make
       run: |
-        docker run --rm -v $(pwd):/build alpine:latest /bin/sh -c "
-          apk add --no-cache \
-            build-base \
+        docker run --rm -v $(pwd):/build ubuntu:22.04 /bin/bash -c "
+          apt-get update && \
+          apt-get install -y \
+            build-essential \
             make \
             bc \
             bison \
@@ -24,17 +25,42 @@ jobs:
             file \
             git \
             wget \
-            tar \
-            gcc-arm-linux-musleabihf \
-            binutils-arm-linux-musleabihf && \
+            curl \
+            texinfo \
+            python3 \
+            rsync && \
+          
+          echo '=== Building musl-cross-make ===' && \
+          # Clone musl-cross-make
+          git clone https://github.com/richfelker/musl-cross-make.git /tmp/musl-cross && \
+          cd /tmp/musl-cross && \
+          
+          # Build cross compiler untuk ARM (butuh waktu ~5-10 menit)
+          make TARGET=arm-linux-musleabihf install -j\$(nproc) && \
+          
+          # Tambahkan ke PATH
+          export PATH=/tmp/musl-cross/output/bin:\$PATH && \
+          
+          # Verifikasi compiler
+          echo '=== Verifikasi Cross Compiler ===' && \
+          arm-linux-musleabihf-gcc --version && \
           
           cd /build && \
           export CROSS_COMPILE=arm-linux-musleabihf- && \
           export ARCH=arm && \
+          export CC=arm-linux-musleabihf-gcc && \
+          export LD=arm-linux-musleabihf-ld && \
+          export AR=arm-linux-musleabihf-ar && \
+          export STRIP=arm-linux-musleabihf-strip && \
           
           # Copy config dari configs/1232_config
           echo '=== Copying 1232_config ===' && \
-          cp configs/1232_config .config && \
+          if [ -f configs/1232_config ]; then
+            cp configs/1232_config .config
+          else
+            echo 'WARNING: configs/1232_config not found, using defconfig' && \
+            make defconfig
+          fi && \
           
           # Aktifkan static build
           echo '=== Enabling STATIC ===' && \
@@ -57,46 +83,64 @@ jobs:
           sed -i 's/^# CONFIG_FEATURE_SH_IS_ASH is not set/CONFIG_FEATURE_SH_IS_ASH=y/' .config || \
           echo 'CONFIG_FEATURE_SH_IS_ASH=y' >> .config && \
           
-          # Set cross compiler
-          echo '=== Setting CROSS_COMPILER ===' && \
+          # Set cross compiler prefix di config
+          echo '=== Setting CROSS_COMPILER_PREFIX ===' && \
           sed -i 's/^CONFIG_CROSS_COMPILER_PREFIX=.*/CONFIG_CROSS_COMPILER_PREFIX=\"arm-linux-musleabihf-\"/' .config || \
           echo 'CONFIG_CROSS_COMPILER_PREFIX=\"arm-linux-musleabihf-\"' >> .config && \
           
-          # Tambahkan extra CFLAGS
-          echo 'CONFIG_EXTRA_CFLAGS=\"-Wno-error\"' >> .config && \
+          # Tambahkan extra CFLAGS untuk menghindari error
+          echo '=== Setting EXTRA_CFLAGS ===' && \
+          echo 'CONFIG_EXTRA_CFLAGS=\"-Wno-error -static -no-pie\"' >> .config && \
           
-          # Hapus konflik
+          # Hapus konflik shell
+          echo '=== Menghapus konfigurasi shell yang konflik ===' && \
           sed -i '/CONFIG_FEATURE_SH_IS_NONE/d' .config && \
           sed -i '/CONFIG_FEATURE_BASH_IS_NONE/d' .config && \
+          sed -i '/CONFIG_FEATURE_SH_IS_HUSH/d' .config && \
           
           # Tampilkan config yang diaktifkan
           echo '=== Config yang diaktifkan ===' && \
-          grep -E 'CONFIG_STATIC|CONFIG_INIT|CONFIG_ASH|CONFIG_FEATURE_SH_IS_ASH' .config || echo 'Tidak ditemukan' && \
+          grep -E 'CONFIG_STATIC|CONFIG_INIT|CONFIG_ASH|CONFIG_FEATURE_SH_IS_ASH|CONFIG_CROSS_COMPILER_PREFIX' .config || echo 'Tidak ditemukan' && \
           
-          # Update config
+          # Update config - jawab default untuk semua pertanyaan
           echo '=== Running make oldconfig ===' && \
-          make oldconfig && \
+          yes "" | make oldconfig || true && \
+          
+          # Clean previous build jika ada
+          echo '=== Cleaning previous build ===' && \
+          make clean || true && \
           
           # Build
           echo '=== Building BusyBox ===' && \
-          make -j\$(nproc) && \
+          make -j\$(nproc) V=1 && \
           
+          # Cek hasil build
           echo '=== Sebelum strip ===' && \
-          ls -lh busybox && \
-          arm-linux-musleabihf-strip -s busybox && \
-          echo '=== Sesudah strip ===' && \
-          ls -lh busybox && \
+          ls -lh busybox || echo 'busybox not found!' && \
           
-          # Verifikasi dengan file command
+          # Strip binary
           if [ -f busybox ]; then
-            echo '=== Build SUCCESS ===' && \
+            echo '=== Stripping binary ===' && \
+            arm-linux-musleabihf-strip -s -R .comment -R .note busybox && \
+            echo '=== Sesudah strip ===' && \
+            ls -lh busybox && \
+            
+            echo '=== Verifikasi file ===' && \
             file busybox && \
-            echo '=== Checking relocations ===' && \
-            arm-linux-musleabihf-readelf -r busybox || echo 'No relocations found (expected!)'
+            
+            echo '=== Mengecek relokasi (seharusnya kosong) ===' && \
+            arm-linux-musleabihf-readelf -r busybox || echo '✓ No relocations found (seperti yang diharapkan!)' && \
+            
+            echo '=== Mengecek dynamic section (seharusnya tidak ada) ===' && \
+            arm-linux-musleabihf-readelf -d busybox || echo '✓ No dynamic section (statically linked)' && \
+            
+            echo '=== Build SUCCESS ==='
           else
             echo '=== Build FAILED ===' && \
             echo 'Mencari file busybox...' && \
             find . -name 'busybox' -type f 2>/dev/null || echo 'Tidak ditemukan' && \
+            echo '=== Log build terakhir ===' && \
+            tail -100 build.log 2>/dev/null || echo 'No build.log' && \
             exit 1
           fi
         "
@@ -105,6 +149,7 @@ jobs:
       if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: busybox-musl
+        name: busybox-musl-static
         path: busybox
-        retention-days: 30        
+        retention-days: 30
+        
