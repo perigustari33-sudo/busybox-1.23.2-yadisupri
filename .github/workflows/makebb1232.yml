@@ -1,4 +1,4 @@
-name: Build BusyBox with Docker
+name: Build BusyBox with musl libc
 
 on:
   workflow_dispatch:
@@ -11,20 +11,25 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Build with Docker Ubuntu 18.04
+    - name: Build with musl-cross-make
       run: |
-        docker run --rm -v $(pwd):/build ubuntu:18.04 /bin/bash -c "
-          apt-get update && \
-          apt-get install -y \
-            gcc-arm-linux-gnueabihf \
-            g++-arm-linux-gnueabihf \
-            binutils-arm-linux-gnueabihf \
-            libc6-dev-armhf-cross \
-            make bc bison flex cpio \
-            file && \
+        docker run --rm -v $(pwd):/build alpine:latest /bin/sh -c "
+          apk add --no-cache \
+            build-base \
+            make \
+            bc \
+            bison \
+            flex \
+            cpio \
+            file \
+            git \
+            wget \
+            tar \
+            gcc-arm-linux-musleabihf \
+            binutils-arm-linux-musleabihf && \
           
           cd /build && \
-          export CROSS_COMPILE=arm-linux-gnueabihf- && \
+          export CROSS_COMPILE=arm-linux-musleabihf- && \
           export ARCH=arm && \
           
           # Copy config dari configs/1232_config
@@ -54,8 +59,8 @@ jobs:
           
           # Set cross compiler
           echo '=== Setting CROSS_COMPILER ===' && \
-          sed -i 's/^CONFIG_CROSS_COMPILER_PREFIX=.*/CONFIG_CROSS_COMPILER_PREFIX=\"arm-linux-gnueabihf-\"/' .config || \
-          echo 'CONFIG_CROSS_COMPILER_PREFIX=\"arm-linux-gnueabihf-\"' >> .config && \
+          sed -i 's/^CONFIG_CROSS_COMPILER_PREFIX=.*/CONFIG_CROSS_COMPILER_PREFIX=\"arm-linux-musleabihf-\"/' .config || \
+          echo 'CONFIG_CROSS_COMPILER_PREFIX=\"arm-linux-musleabihf-\"' >> .config && \
           
           # Tambahkan extra CFLAGS
           echo 'CONFIG_EXTRA_CFLAGS=\"-Wno-error\"' >> .config && \
@@ -78,14 +83,16 @@ jobs:
           
           echo '=== Sebelum strip ===' && \
           ls -lh busybox && \
-          arm-linux-gnueabihf-strip -s busybox && \
+          arm-linux-musleabihf-strip -s busybox && \
           echo '=== Sesudah strip ===' && \
           ls -lh busybox && \
           
-          # Verifikasi dengan file command (sudah terinstall)
+          # Verifikasi dengan file command
           if [ -f busybox ]; then
             echo '=== Build SUCCESS ===' && \
-            file busybox
+            file busybox && \
+            echo '=== Checking relocations ===' && \
+            arm-linux-musleabihf-readelf -r busybox || echo 'No relocations found (expected!)'
           else
             echo '=== Build FAILED ===' && \
             echo 'Mencari file busybox...' && \
@@ -98,6 +105,6 @@ jobs:
       if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: busybox
+        name: busybox-musl
         path: busybox
-        retention-days: 30
+        retention-days: 30        
