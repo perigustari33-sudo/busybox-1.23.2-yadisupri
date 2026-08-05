@@ -27,20 +27,16 @@ jobs:
         # Generate default config
         make defconfig
         
-        # Disable problematic applets (header conflicts)
-        echo "Disabling IFPLUGD..."
-        sed -i 's/CONFIG_IFPLUGD=y/# CONFIG_IFPLUGD is not set/' .config
-        
-        echo "Disabling INETD (needs RPC headers)..."
-        sed -i 's/CONFIG_INETD=y/# CONFIG_INETD is not set/' .config
-        sed -i 's/CONFIG_FEATURE_INETD_RPC=y/# CONFIG_FEATURE_INETD_RPC is not set/' .config
+        # Disable problematic applets
+        for applet in IFPLUGD INETD FEATURE_INETD_RPC \
+                      RUNSV RUNSVDIR SV SVLOGD CHPST SETUIDGID ENVUIDGID ENVDIR SOFTLIMIT; do
+          sed -i "s/CONFIG_${applet}=y/# CONFIG_${applet} is not set/" .config
+        done
         
         # Enable static build
-        echo "Enabling static build..."
         sed -i 's/^# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config
         
         # Set cross compiler prefix
-        echo "Setting cross compiler prefix..."
         sed -i '/CONFIG_CROSS_COMPILER_PREFIX/d' .config
         echo 'CONFIG_CROSS_COMPILER_PREFIX="/opt/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-"' >> .config
         
@@ -49,18 +45,14 @@ jobs:
         echo 'CONFIG_EXTRA_CFLAGS="-Wno-error -static"' >> .config
         
         # Run oldconfig
-        echo "Running oldconfig..."
         yes "" | make oldconfig
         
         # Clean and build
-        echo "Building BusyBox..."
         make clean
         make -j$(nproc)
         
         # Strip and verify
-        echo "Stripping binary..."
         arm-linux-musleabihf-strip -s -R .comment -R .note busybox
-        echo "File info:"
         file busybox
         echo "=== BUILD SUCCESS ==="
 
