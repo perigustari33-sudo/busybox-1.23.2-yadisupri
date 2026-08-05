@@ -13,7 +13,7 @@ jobs:
 
     - name: Install musl toolchain
       run: |
-        wget https://github.com/musl-cc/musl.cc/releases/download/v0.0.1/arm-linux-musleabihf-cross.tgz
+        wget https://archive.org/download/arm-linux-musleabihf-cross/arm-linux-musleabihf-cross.tgz
         sudo tar -xzf arm-linux-musleabihf-cross.tgz -C /opt/
         export PATH=/opt/arm-linux-musleabihf-cross/bin:$PATH
         arm-linux-musleabihf-gcc --version
