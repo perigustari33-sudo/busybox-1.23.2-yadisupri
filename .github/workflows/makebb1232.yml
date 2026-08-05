@@ -1,4 +1,4 @@
-name: Build BusyBox Static
+name: Build BusyBox (Fully Static)
 
 on:
   workflow_dispatch:
@@ -15,44 +15,101 @@ jobs:
       run: |
         wget https://github.com/musl-cc/musl.cc/releases/download/v0.0.1/arm-linux-musleabihf-cross.tgz
         sudo tar -xzf arm-linux-musleabihf-cross.tgz -C /opt/
-        echo "PATH=/opt/arm-linux-musleabihf-cross/bin:$PATH" >> $GITHUB_ENV
+        export PATH=/opt/arm-linux-musleabihf-cross/bin:$PATH
+        arm-linux-musleabihf-gcc --version
 
-    - name: Build BusyBox
+    - name: Build BusyBox (Fully Static)
       run: |
         export PATH=/opt/arm-linux-musleabihf-cross/bin:$PATH
         export CROSS_COMPILE=arm-linux-musleabihf-
         export ARCH=arm
         
+        # Buat config dari awal
         make defconfig
         
-        # Disable problematic applets
+        # === DISABLE PROBLEMATIC APPLETS ===
         for applet in IFPLUGD INETD FEATURE_INETD_RPC \
                       RUNSV RUNSVDIR SV SVLOGD CHPST SETUIDGID ENVUIDGID ENVDIR SOFTLIMIT; do
           sed -i "s/CONFIG_${applet}=y/# CONFIG_${applet} is not set/" .config
         done
         
-        # Enable static build
-        sed -i 's/^# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config
-        sed -i 's/CONFIG_PIE=y/# CONFIG_PIE is not set/' .config
+        # === FORCE STATIC BUILD ===
+        # 1. Aktifkan static
+        sed -i '/^CONFIG_STATIC/d' .config
+        echo 'CONFIG_STATIC=y' >> .config
         
-        # Set cross compiler prefix
-        sed -i '/CONFIG_CROSS_COMPILER_PREFIX/d' .config
+        # 2. Disable PIE (ini yang paling penting!)
+        sed -i '/^CONFIG_PIE/d' .config
+        echo '# CONFIG_PIE is not set' >> .config
+        
+        # 3. Disable shared library
+        sed -i '/^CONFIG_BUILD_LIBBUSYBOX/d' .config
+        echo '# CONFIG_BUILD_LIBBUSYBOX is not set' >> .config
+        
+        # 4. Set cross compiler prefix
+        sed -i '/^CONFIG_CROSS_COMPILER_PREFIX/d' .config
         echo 'CONFIG_CROSS_COMPILER_PREFIX="/opt/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-"' >> .config
         
-        # Force static via EXTRA flags
-        echo 'CONFIG_EXTRA_CFLAGS="-Wno-error -static"' >> .config
-        echo 'CONFIG_EXTRA_LDFLAGS="-static"' >> .config
+        # 5. Force static via EXTRA_CFLAGS
+        sed -i '/^CONFIG_EXTRA_CFLAGS/d' .config
+        echo 'CONFIG_EXTRA_CFLAGS="-Wno-error -static -static-libgcc -no-pie"' >> .config
         
+        # 6. Force static via EXTRA_LDFLAGS
+        sed -i '/^CONFIG_EXTRA_LDFLAGS/d' .config
+        echo 'CONFIG_EXTRA_LDFLAGS="-static -no-pie"' >> .config
+        
+        # 7. Force static via EXTRA_LDLIBS
+        sed -i '/^CONFIG_EXTRA_LDLIBS/d' .config
+        echo 'CONFIG_EXTRA_LDLIBS="-static"' >> .config
+        
+        # 8. Disable dynamic linker
+        sed -i '/^CONFIG_FEATURE_INSTALLER/d' .config
+        echo '# CONFIG_FEATURE_INSTALLER is not set' >> .config
+        
+        # 9. Disable NSS (Name Service Switch) - often causes dynamic linking
+        sed -i '/^CONFIG_USE_BB_PWD_GRP/d' .config
+        echo 'CONFIG_USE_BB_PWD_GRP=y' >> .config
+        
+        # === RUN OLDCONFIG ===
+        echo "Running oldconfig..."
         yes "" | make oldconfig
+        
+        # === CLEAN ===
         make clean
-        make -j$(nproc)
         
-        arm-linux-musleabihf-strip -s busybox
+        # === BUILD ===
+        echo "Building..."
+        make -j$(nproc) \
+          CC="arm-linux-musleabihf-gcc" \
+          EXTRA_CFLAGS="-Wno-error -static -static-libgcc -no-pie" \
+          EXTRA_LDFLAGS="-static -no-pie" \
+          EXTRA_LDLIBS="-static"
         
-        echo "=== Verifikasi Binary ==="
+        # === STRIP ===
+        arm-linux-musleabihf-strip -s -R .comment -R .note -R .eh_frame -R .debug_info busybox
+        
+        # === VERIFIKASI ===
+        echo ""
+        echo "=== VERIFIKASI BINARY ==="
+        echo ""
+        
+        echo "1. File info:"
         file busybox
-        echo "=== Shared Library Dependencies ==="
-        arm-linux-musleabihf-readelf -d busybox | grep NEEDED || echo "✓ Static (no dependencies)"
+        
+        echo ""
+        echo "2. Dynamic section (should show nothing or no PIE):"
+        arm-linux-musleabihf-readelf -d busybox | grep -E "NEEDED|PIE|DYNAMIC" || echo "✓ No dynamic section found"
+        
+        echo ""
+        echo "3. Shared library dependencies (should be empty):"
+        arm-linux-musleabihf-readelf -d busybox | grep NEEDED || echo "✓ No shared library dependencies"
+        
+        echo ""
+        echo "4. Binary size:"
+        ls -lh busybox
+        
+        echo ""
+        echo "=== BUILD SUCCESS ==="
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
