@@ -1,4 +1,4 @@
-name: Build BusyBox dengan musl-cross-make
+name: Build BusyBox (Pre-built Toolchain)
 
 on:
   workflow_dispatch:
@@ -8,174 +8,34 @@ jobs:
     runs-on: ubuntu-22.04
     
     steps:
-    - name: Checkout kode
+    - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Build dengan musl-cross-make
+    - name: Install pre-built musl toolchain
       run: |
-        docker run --rm -v $(pwd):/build ubuntu:22.04 /bin/bash -c "
-          set -e
-          
-          # Install dependensi
-          apt-get update && \
-          apt-get install -y \
-            build-essential \
-            make \
-            bc \
-            bison \
-            flex \
-            cpio \
-            file \
-            git \
-            wget \
-            curl \
-            texinfo \
-            python3 \
-            rsync \
-            patch \
-            xz-utils \
-            unzip && \
-          
-          echo '=== Membangun musl-cross-make ===' && \
-          cd /tmp && \
-          git clone https://github.com/richfelker/musl-cross-make.git musl-cross && \
-          cd musl-cross && \
-          
-          # Buat konfigurasi dengan mirror alternatif
-          cat > config.mak << 'EOF'
-          TARGET = arm-linux-musleabihf
-          OUTPUT = /opt/musl-cross
-          # Gunakan mirror alternatif jika mirror utama gagal
-          GCC_URL = https://ftp.gnu.org/gnu/gcc/gcc-9.4.0/gcc-9.4.0.tar.xz
-          BINUTILS_URL = https://ftp.gnu.org/gnu/binutils/binutils-2.44.tar.gz
-          GMP_URL = https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz
-          EOF
-          
-          # Download file secara manual dengan percobaan ulang
-          # Ini adalah solusi untuk error 502
-          mkdir -p sources
-          cd sources
-          
-          # Download file dengan percobaan ulang
-          for url in \
-            'https://ftp.gnu.org/gnu/gcc/gcc-9.4.0/gcc-9.4.0.tar.xz' \
-            'https://ftp.gnu.org/gnu/binutils/binutils-2.44.tar.gz' \
-            'https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz' \
-            'https://musl.libc.org/releases/musl-1.2.6.tar.gz'; do
-            filename=\$(basename \"\$url\")
-            if [ ! -f \"\$filename\" ]; then
-              echo \"Mendownload \$filename...\"
-              for percobaan in 1 2 3 4 5; do
-                if wget -c --timeout=60 --tries=3 \"\$url\" -O \"\$filename.tmp\" 2>&1; then
-                  mv \"\$filename.tmp\" \"\$filename\"
-                  echo \"Berhasil mendownload \$filename\"
-                  break
-                else
-                  echo \"Percobaan \$percobaan gagal, mencoba lagi...\"
-                  sleep 5
-                fi
-              done
-              if [ ! -f \"\$filename\" ]; then
-                echo \"Gagal mendownload \$filename setelah 5 percobaan\"
-                exit 1
-              fi
-            fi
-          done
-          cd ..
-          
-          # Jalankan make install
-          make install -j\$(nproc) && \
-          
-          # Set PATH di level container
-          export PATH=/opt/musl-cross/bin:\$PATH && \
-          
-          # Verifikasi compiler
-          echo '=== Verifikasi Cross Compiler ===' && \
-          /opt/musl-cross/bin/arm-linux-musleabihf-gcc --version && \
-          
-          cd /build && \
-          
-          # === PERBAIKAN: Buat config dengan benar ===
-          echo '=== Membuat .config ===' && \
-          # Pertama, buat konfigurasi default
-          make defconfig ARCH=arm CROSS_COMPILE=arm-linux-musleabihf- && \
-          
-          # Kemudian terapkan konfigurasi kustom jika ada
-          if [ -f configs/1232_config ]; then
-            echo 'Menggabungkan konfigurasi kustom dari configs/1232_config...'
-            # Gunakan oldconfig untuk menggabungkan pengaturan kustom
-            cp .config .config.old
-            # Terapkan pengaturan kustom dari configs/1232_config
-            while read -r line; do
-              if [[ \"\$line\" =~ ^CONFIG_[A-Z_]+= ]]; then
-                key=\$(echo \"\$line\" | cut -d'=' -f1)
-                sed -i \"/^\${key}=/d\" .config
-                echo \"\$line\" >> .config
-              elif [[ \"\$line\" =~ ^#\ CONFIG_[A-Z_]+\ is\ not\ set ]]; then
-                key=\$(echo \"\$line\" | sed 's/^# //' | cut -d' ' -f1)
-                sed -i \"/^\${key}=/d\" .config
-                echo \"\$line\" >> .config
-              fi
-            done < configs/1232_config
-          fi && \
-          
-          # Modifikasi konfigurasi
-          echo '=== Modifikasi .config ===' && \
-          sed -i '/^CONFIG_STATIC/d' .config && echo 'CONFIG_STATIC=y' >> .config && \
-          sed -i '/^CONFIG_INIT/d' .config && echo 'CONFIG_INIT=y' >> .config && \
-          sed -i '/^CONFIG_FEATURE_INITRD/d' .config && echo 'CONFIG_FEATURE_INITRD=y' >> .config && \
-          sed -i '/^CONFIG_ASH/d' .config && echo 'CONFIG_ASH=y' >> .config && \
-          sed -i '/^CONFIG_FEATURE_SH_IS_ASH/d' .config && echo 'CONFIG_FEATURE_SH_IS_ASH=y' >> .config && \
-          sed -i '/^CONFIG_FEATURE_SH_IS_NONE/d' .config && \
-          sed -i '/^CONFIG_FEATURE_BASH_IS_NONE/d' .config && \
-          sed -i '/^CONFIG_FEATURE_SH_IS_HUSH/d' .config && \
-          
-          # Set CROSS_COMPILER_PREFIX secara eksplisit
-          sed -i '/^CONFIG_CROSS_COMPILER_PREFIX/d' .config && \
-          echo 'CONFIG_CROSS_COMPILER_PREFIX=\"/opt/musl-cross/bin/arm-linux-musleabihf-\"' >> .config && \
-          
-          # Tambahkan EXTRA_CFLAGS
-          sed -i '/^CONFIG_EXTRA_CFLAGS/d' .config && \
-          echo 'CONFIG_EXTRA_CFLAGS=\"-Wno-error -static -no-pie\"' >> .config && \
-          
-          echo '=== Konfigurasi yang diaktifkan ===' && \
-          grep -E 'CONFIG_STATIC|CONFIG_INIT|CONFIG_ASH|CONFIG_CROSS_COMPILER_PREFIX' .config || echo 'Tidak ditemukan' && \
-          
-          # Jalankan oldconfig (gunakan yes untuk menerima default)
-          echo '=== Menjalankan make oldconfig ===' && \
-          yes \"\" | make oldconfig ARCH=arm CROSS_COMPILE=/opt/musl-cross/bin/arm-linux-musleabihf- && \
-          
-          # Bersihkan
-          echo '=== Membersihkan ===' && \
-          make clean && \
-          
-          # Build BusyBox
-          echo '=== Membangun BusyBox ===' && \
-          PATH=/opt/musl-cross/bin:\$PATH make -j\$(nproc) ARCH=arm CROSS_COMPILE=/opt/musl-cross/bin/arm-linux-musleabihf- && \
-          
-          # Cek hasil
-          echo '=== Hasil build ===' && \
-          ls -lh busybox 2>/dev/null || echo 'busybox tidak ditemukan' && \
-          
-          if [ -f busybox ]; then
-            echo '=== Strip binary ===' && \
-            /opt/musl-cross/bin/arm-linux-musleabihf-strip -s -R .comment -R .note busybox && \
-            echo '=== Info file ===' && \
-            file busybox && \
-            echo '=== BUILD SUKSES ==='
-          else
-            echo '=== BUILD GAGAL ===' && \
-            exit 1
-          fi
-        "
+        wget https://musl.cc/arm-linux-musleabihf-cross.tgz
+        sudo tar -xzf arm-linux-musleabihf-cross.tgz -C /opt/
+        export PATH=/opt/arm-linux-musleabihf-cross/bin:$PATH
+        arm-linux-musleabihf-gcc --version
 
-    - name: Upload artefak
-      if: success()
+    - name: Build BusyBox
+      run: |
+        export PATH=/opt/arm-linux-musleabihf-cross/bin:$PATH
+        export CROSS_COMPILE=arm-linux-musleabihf-
+        export ARCH=arm
+        
+        make defconfig
+        sed -i 's/^# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config
+        echo 'CONFIG_CROSS_COMPILER_PREFIX="/opt/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-"' >> .config
+        yes "" | make oldconfig
+        make clean
+        make -j$(nproc)
+        arm-linux-musleabihf-strip -s busybox
+        file busybox
+
+    - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
         name: busybox-musl-static
         path: busybox
         retention-days: 30
-
-
-        
