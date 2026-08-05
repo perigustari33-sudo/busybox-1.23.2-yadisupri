@@ -1,4 +1,4 @@
-name: Build BusyBox (Pre-built Toolchain)
+name: Build BusyBox (Pre-built Toolchain - Fixed)
 
 on:
   workflow_dispatch:
@@ -24,14 +24,34 @@ jobs:
         export CROSS_COMPILE=arm-linux-musleabihf-
         export ARCH=arm
         
+        # Generate default config
         make defconfig
+        
+        # Disable ifplugd (fix header conflict)
+        sed -i 's/CONFIG_IFPLUGD=y/# CONFIG_IFPLUGD is not set/' .config
+        
+        # Enable static build
         sed -i 's/^# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config
+        
+        # Set cross compiler prefix
+        sed -i '/CONFIG_CROSS_COMPILER_PREFIX/d' .config
         echo 'CONFIG_CROSS_COMPILER_PREFIX="/opt/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-"' >> .config
+        
+        # Add extra CFLAGS
+        sed -i '/CONFIG_EXTRA_CFLAGS/d' .config
+        echo 'CONFIG_EXTRA_CFLAGS="-Wno-error -static"' >> .config
+        
+        # Run oldconfig
         yes "" | make oldconfig
+        
+        # Clean and build
         make clean
         make -j$(nproc)
-        arm-linux-musleabihf-strip -s busybox
+        
+        # Strip and verify
+        arm-linux-musleabihf-strip -s -R .comment -R .note busybox
         file busybox
+        echo "=== BUILD SUCCESS ==="
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
