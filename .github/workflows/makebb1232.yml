@@ -39,29 +39,21 @@ jobs:
           git clone https://github.com/richfelker/musl-cross-make.git musl-cross && \
           cd musl-cross && \
           
-          # Buat config.mak dengan target yang benar
+          # Buat config.mak dengan target musl armhf
           echo 'TARGET = arm-linux-musleabihf' > config.mak && \
           echo 'OUTPUT = /opt/musl-cross' >> config.mak && \
           
-          # Build cross compiler
+          # Build & Install cross compiler
           make install -j\$(nproc) && \
           
-          # Tambahkan ke PATH
+          # Set PATH di level container
           export PATH=/opt/musl-cross/bin:\$PATH && \
           
           # Verifikasi compiler
           echo '=== Verifikasi Cross Compiler ===' && \
-          arm-linux-musleabihf-gcc --version && \
-          which arm-linux-musleabihf-gcc || echo 'Not in PATH' && \
+          /opt/musl-cross/bin/arm-linux-musleabihf-gcc --version && \
           
           cd /build && \
-          export CROSS_COMPILE=arm-linux-musleabihf- && \
-          export ARCH=arm && \
-          export CC=arm-linux-musleabihf-gcc && \
-          export LD=arm-linux-musleabihf-ld && \
-          export AR=arm-linux-musleabihf-ar && \
-          export STRIP=arm-linux-musleabihf-strip && \
-          export PATH=/opt/musl-cross/bin:\$PATH && \
           
           # Buat config dari template
           echo '=== Membuat .config ===' && \
@@ -69,7 +61,7 @@ jobs:
             cp configs/1232_config .config
           else
             echo 'WARNING: configs/1232_config not found, using defconfig' && \
-            make defconfig
+            make defconfig ARCH=arm CROSS_COMPILE=arm-linux-musleabihf-
           fi && \
           
           # Modifikasi config
@@ -83,26 +75,28 @@ jobs:
           sed -i '/CONFIG_FEATURE_BASH_IS_NONE/d' .config && \
           sed -i '/CONFIG_FEATURE_SH_IS_HUSH/d' .config && \
           
-          # Hapus CROSS_COMPILER_PREFIX dari config agar tidak conflict dengan environment
+          # Set CROSS_COMPILER_PREFIX secara eksplisit di .config agar BusyBox tahu path lengkapnya
           sed -i '/CONFIG_CROSS_COMPILER_PREFIX/d' .config && \
+          echo 'CONFIG_CROSS_COMPILER_PREFIX=\"/opt/musl-cross/bin/arm-linux-musleabihf-\"' >> .config && \
           
           # Tambahkan EXTRA_CFLAGS
+          sed -i '/CONFIG_EXTRA_CFLAGS/d' .config && \
           echo 'CONFIG_EXTRA_CFLAGS=\"-Wno-error -static -no-pie\"' >> .config && \
           
           echo '=== Konfigurasi yang diaktifkan ===' && \
-          grep -E 'CONFIG_STATIC|CONFIG_INIT|CONFIG_ASH' .config || echo 'Tidak ditemukan' && \
+          grep -E 'CONFIG_STATIC|CONFIG_INIT|CONFIG_ASH|CONFIG_CROSS_COMPILER_PREFIX' .config || echo 'Tidak ditemukan' && \
           
-          # Jalankan oldconfig (harus di direktori build busybox)
+          # Jalankan oldconfig
           echo '=== Running make oldconfig ===' && \
-          yes \"\" | make oldconfig || echo 'oldconfig selesai' && \
+          yes \"\" | make oldconfig ARCH=arm CROSS_COMPILE=/opt/musl-cross/bin/arm-linux-musleabihf- && \
           
           # Clean
           echo '=== Cleaning ===' && \
-          make clean || true && \
+          make clean && \
           
-          # Build
+          # Build BusyBox dengan menyertakan PATH langsung ke perintah make
           echo '=== Building BusyBox ===' && \
-          make -j\$(nproc) V=1 && \
+          PATH=/opt/musl-cross/bin:\$PATH make -j\$(nproc) ARCH=arm CROSS_COMPILE=/opt/musl-cross/bin/arm-linux-musleabihf- V=1 && \
           
           # Cek hasil
           echo '=== Hasil build ===' && \
@@ -110,20 +104,12 @@ jobs:
           
           if [ -f busybox ]; then
             echo '=== Stripping binary ===' && \
-            arm-linux-musleabihf-strip -s -R .comment -R .note busybox && \
+            /opt/musl-cross/bin/arm-linux-musleabihf-strip -s -R .comment -R .note busybox && \
             echo '=== File info ===' && \
             file busybox && \
-            echo '=== Mengecek relokasi ===' && \
-            arm-linux-musleabihf-readelf -r busybox 2>&1 | head -20 || echo '✓ Tidak ada relokasi' && \
-            echo '=== Mengecek dynamic section ===' && \
-            arm-linux-musleabihf-readelf -d busybox 2>&1 | head -10 || echo '✓ Statically linked' && \
             echo '=== BUILD SUCCESS ==='
           else
             echo '=== BUILD FAILED ===' && \
-            echo 'Mencari file...' && \
-            find . -name 'busybox' -type f 2>/dev/null || echo 'Tidak ditemukan' && \
-            echo '=== Directory contents ===' && \
-            ls -la && \
             exit 1
           fi
         "
@@ -135,4 +121,3 @@ jobs:
         name: busybox-musl-static
         path: busybox
         retention-days: 30
-        
