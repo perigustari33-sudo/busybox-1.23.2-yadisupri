@@ -14,6 +14,7 @@ jobs:
     - name: Build with musl-cross-make
       run: |
         docker run --rm -v $(pwd):/build ubuntu:22.04 /bin/bash -c "
+          set -e
           apt-get update && \
           apt-get install -y \
             build-essential \
@@ -28,22 +29,30 @@ jobs:
             curl \
             texinfo \
             python3 \
-            rsync && \
+            rsync \
+            patch \
+            xz-utils \
+            unzip && \
           
           echo '=== Building musl-cross-make ===' && \
-          # Clone musl-cross-make
-          git clone https://github.com/richfelker/musl-cross-make.git /tmp/musl-cross && \
-          cd /tmp/musl-cross && \
+          cd /tmp && \
+          git clone https://github.com/richfelker/musl-cross-make.git musl-cross && \
+          cd musl-cross && \
           
-          # Build cross compiler untuk ARM (butuh waktu ~5-10 menit)
-          make TARGET=arm-linux-musleabihf install -j\$(nproc) && \
+          # Buat config.mak dengan target yang benar
+          echo 'TARGET = arm-linux-musleabihf' > config.mak && \
+          echo 'OUTPUT = /opt/musl-cross' >> config.mak && \
+          
+          # Build cross compiler
+          make install -j\$(nproc) && \
           
           # Tambahkan ke PATH
-          export PATH=/tmp/musl-cross/output/bin:\$PATH && \
+          export PATH=/opt/musl-cross/bin:\$PATH && \
           
           # Verifikasi compiler
           echo '=== Verifikasi Cross Compiler ===' && \
           arm-linux-musleabihf-gcc --version && \
+          which arm-linux-musleabihf-gcc || echo 'Not in PATH' && \
           
           cd /build && \
           export CROSS_COMPILE=arm-linux-musleabihf- && \
@@ -52,9 +61,10 @@ jobs:
           export LD=arm-linux-musleabihf-ld && \
           export AR=arm-linux-musleabihf-ar && \
           export STRIP=arm-linux-musleabihf-strip && \
+          export PATH=/opt/musl-cross/bin:\$PATH && \
           
-          # Copy config dari configs/1232_config
-          echo '=== Copying 1232_config ===' && \
+          # Buat config dari template
+          echo '=== Membuat .config ===' && \
           if [ -f configs/1232_config ]; then
             cp configs/1232_config .config
           else
@@ -62,85 +72,58 @@ jobs:
             make defconfig
           fi && \
           
-          # Aktifkan static build
-          echo '=== Enabling STATIC ===' && \
-          sed -i 's/^# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config || \
-          echo 'CONFIG_STATIC=y' >> .config && \
-          
-          # Aktifkan INIT
-          echo '=== Enabling INIT ===' && \
-          sed -i 's/^# CONFIG_INIT is not set/CONFIG_INIT=y/' .config || \
-          echo 'CONFIG_INIT=y' >> .config && \
-          
-          sed -i 's/^# CONFIG_FEATURE_INITRD is not set/CONFIG_FEATURE_INITRD=y/' .config || \
-          echo 'CONFIG_FEATURE_INITRD=y' >> .config && \
-          
-          # Aktifkan shell
-          echo '=== Enabling SHELL ===' && \
-          sed -i 's/^# CONFIG_ASH is not set/CONFIG_ASH=y/' .config || \
-          echo 'CONFIG_ASH=y' >> .config && \
-          
-          sed -i 's/^# CONFIG_FEATURE_SH_IS_ASH is not set/CONFIG_FEATURE_SH_IS_ASH=y/' .config || \
-          echo 'CONFIG_FEATURE_SH_IS_ASH=y' >> .config && \
-          
-          # Set cross compiler prefix di config
-          echo '=== Setting CROSS_COMPILER_PREFIX ===' && \
-          sed -i 's/^CONFIG_CROSS_COMPILER_PREFIX=.*/CONFIG_CROSS_COMPILER_PREFIX=\"arm-linux-musleabihf-\"/' .config || \
-          echo 'CONFIG_CROSS_COMPILER_PREFIX=\"arm-linux-musleabihf-\"' >> .config && \
-          
-          # Tambahkan extra CFLAGS untuk menghindari error
-          echo '=== Setting EXTRA_CFLAGS ===' && \
-          echo 'CONFIG_EXTRA_CFLAGS=\"-Wno-error -static -no-pie\"' >> .config && \
-          
-          # Hapus konflik shell
-          echo '=== Menghapus konfigurasi shell yang konflik ===' && \
+          # Modifikasi config
+          echo '=== Modifikasi .config ===' && \
+          sed -i 's/^# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config || echo 'CONFIG_STATIC=y' >> .config && \
+          sed -i 's/^# CONFIG_INIT is not set/CONFIG_INIT=y/' .config || echo 'CONFIG_INIT=y' >> .config && \
+          sed -i 's/^# CONFIG_FEATURE_INITRD is not set/CONFIG_FEATURE_INITRD=y/' .config || echo 'CONFIG_FEATURE_INITRD=y' >> .config && \
+          sed -i 's/^# CONFIG_ASH is not set/CONFIG_ASH=y/' .config || echo 'CONFIG_ASH=y' >> .config && \
+          sed -i 's/^# CONFIG_FEATURE_SH_IS_ASH is not set/CONFIG_FEATURE_SH_IS_ASH=y/' .config || echo 'CONFIG_FEATURE_SH_IS_ASH=y' >> .config && \
           sed -i '/CONFIG_FEATURE_SH_IS_NONE/d' .config && \
           sed -i '/CONFIG_FEATURE_BASH_IS_NONE/d' .config && \
           sed -i '/CONFIG_FEATURE_SH_IS_HUSH/d' .config && \
           
-          # Tampilkan config yang diaktifkan
-          echo '=== Config yang diaktifkan ===' && \
-          grep -E 'CONFIG_STATIC|CONFIG_INIT|CONFIG_ASH|CONFIG_FEATURE_SH_IS_ASH|CONFIG_CROSS_COMPILER_PREFIX' .config || echo 'Tidak ditemukan' && \
+          # Hapus CROSS_COMPILER_PREFIX dari config agar tidak conflict dengan environment
+          sed -i '/CONFIG_CROSS_COMPILER_PREFIX/d' .config && \
           
-          # Update config - jawab default untuk semua pertanyaan
+          # Tambahkan EXTRA_CFLAGS
+          echo 'CONFIG_EXTRA_CFLAGS=\"-Wno-error -static -no-pie\"' >> .config && \
+          
+          echo '=== Konfigurasi yang diaktifkan ===' && \
+          grep -E 'CONFIG_STATIC|CONFIG_INIT|CONFIG_ASH' .config || echo 'Tidak ditemukan' && \
+          
+          # Jalankan oldconfig (harus di direktori build busybox)
           echo '=== Running make oldconfig ===' && \
-          yes "" | make oldconfig || true && \
+          yes \"\" | make oldconfig || echo 'oldconfig selesai' && \
           
-          # Clean previous build jika ada
-          echo '=== Cleaning previous build ===' && \
+          # Clean
+          echo '=== Cleaning ===' && \
           make clean || true && \
           
           # Build
           echo '=== Building BusyBox ===' && \
           make -j\$(nproc) V=1 && \
           
-          # Cek hasil build
-          echo '=== Sebelum strip ===' && \
-          ls -lh busybox || echo 'busybox not found!' && \
+          # Cek hasil
+          echo '=== Hasil build ===' && \
+          ls -lh busybox 2>/dev/null || echo 'busybox not found' && \
           
-          # Strip binary
           if [ -f busybox ]; then
             echo '=== Stripping binary ===' && \
             arm-linux-musleabihf-strip -s -R .comment -R .note busybox && \
-            echo '=== Sesudah strip ===' && \
-            ls -lh busybox && \
-            
-            echo '=== Verifikasi file ===' && \
+            echo '=== File info ===' && \
             file busybox && \
-            
-            echo '=== Mengecek relokasi (seharusnya kosong) ===' && \
-            arm-linux-musleabihf-readelf -r busybox || echo '✓ No relocations found (seperti yang diharapkan!)' && \
-            
-            echo '=== Mengecek dynamic section (seharusnya tidak ada) ===' && \
-            arm-linux-musleabihf-readelf -d busybox || echo '✓ No dynamic section (statically linked)' && \
-            
-            echo '=== Build SUCCESS ==='
+            echo '=== Mengecek relokasi ===' && \
+            arm-linux-musleabihf-readelf -r busybox 2>&1 | head -20 || echo '✓ Tidak ada relokasi' && \
+            echo '=== Mengecek dynamic section ===' && \
+            arm-linux-musleabihf-readelf -d busybox 2>&1 | head -10 || echo '✓ Statically linked' && \
+            echo '=== BUILD SUCCESS ==='
           else
-            echo '=== Build FAILED ===' && \
-            echo 'Mencari file busybox...' && \
+            echo '=== BUILD FAILED ===' && \
+            echo 'Mencari file...' && \
             find . -name 'busybox' -type f 2>/dev/null || echo 'Tidak ditemukan' && \
-            echo '=== Log build terakhir ===' && \
-            tail -100 build.log 2>/dev/null || echo 'No build.log' && \
+            echo '=== Directory contents ===' && \
+            ls -la && \
             exit 1
           fi
         "
