@@ -1,4 +1,4 @@
-name: Build BusyBox (Pre-built Toolchain - Fixed)
+name: Build BusyBox Static
 
 on:
   workflow_dispatch:
@@ -11,12 +11,11 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Install pre-built musl toolchain
+    - name: Install musl toolchain
       run: |
         wget https://github.com/musl-cc/musl.cc/releases/download/v0.0.1/arm-linux-musleabihf-cross.tgz
         sudo tar -xzf arm-linux-musleabihf-cross.tgz -C /opt/
-        export PATH=/opt/arm-linux-musleabihf-cross/bin:$PATH
-        arm-linux-musleabihf-gcc --version
+        echo "PATH=/opt/arm-linux-musleabihf-cross/bin:$PATH" >> $GITHUB_ENV
 
     - name: Build BusyBox
       run: |
@@ -24,7 +23,6 @@ jobs:
         export CROSS_COMPILE=arm-linux-musleabihf-
         export ARCH=arm
         
-        # Generate default config
         make defconfig
         
         # Disable problematic applets
@@ -35,30 +33,30 @@ jobs:
         
         # Enable static build
         sed -i 's/^# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config
+        sed -i 's/CONFIG_PIE=y/# CONFIG_PIE is not set/' .config
         
         # Set cross compiler prefix
         sed -i '/CONFIG_CROSS_COMPILER_PREFIX/d' .config
         echo 'CONFIG_CROSS_COMPILER_PREFIX="/opt/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-"' >> .config
         
-        # Add extra CFLAGS
-        sed -i '/CONFIG_EXTRA_CFLAGS/d' .config
+        # Force static via EXTRA flags
         echo 'CONFIG_EXTRA_CFLAGS="-Wno-error -static"' >> .config
+        echo 'CONFIG_EXTRA_LDFLAGS="-static"' >> .config
         
-        # Run oldconfig
         yes "" | make oldconfig
-        
-        # Clean and build
         make clean
         make -j$(nproc)
         
-        # Strip and verify
-        arm-linux-musleabihf-strip -s -R .comment -R .note busybox
+        arm-linux-musleabihf-strip -s busybox
+        
+        echo "=== Verifikasi Binary ==="
         file busybox
-        echo "=== BUILD SUCCESS ==="
+        echo "=== Shared Library Dependencies ==="
+        arm-linux-musleabihf-readelf -d busybox | grep NEEDED || echo "✓ Static (no dependencies)"
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: busybox-musl-static
+        name: busybox-static-arm
         path: busybox
         retention-days: 30
