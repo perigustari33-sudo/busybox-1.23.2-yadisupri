@@ -102,7 +102,7 @@ jobs:
       if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: busybox-${{ github.run_number }}-${{ github.run_attempt }}-$(date +'%Y%m%d-%H%M%S')
+        name: busybox-${{ github.run_number }}-${{ github.run_attempt }}
         path: busybox
         retention-days: 30
         
