@@ -653,7 +653,7 @@ static void parse_inittab(void)
 {
 #if ENABLE_FEATURE_USE_INITTAB
 	char *token[4];
-	parser_t *parser = config_open2("/etc/inittab", fopen_for_read);
+	parser_t *parser = config_open2("/etc/user/inittab", fopen_for_read);
 
 	if (parser == NULL)
 #endif
