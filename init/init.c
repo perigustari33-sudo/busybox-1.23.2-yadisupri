@@ -144,7 +144,7 @@
 
 /* Default sysinit script. */
 #ifndef INIT_SCRIPT
-# define INIT_SCRIPT  "/etc/init.d/rcS2"
+# define INIT_SCRIPT  "/etc/init.d/rcS"
 #endif
 
 /* Each type of actions can appear many times. They will be
@@ -653,7 +653,7 @@ static void parse_inittab(void)
 {
 #if ENABLE_FEATURE_USE_INITTAB
 	char *token[4];
-	parser_t *parser = config_open2("/etc/inittab2", fopen_for_read);
+	parser_t *parser = config_open2("/etc/inittab", fopen_for_read);
 
 	if (parser == NULL)
 #endif
